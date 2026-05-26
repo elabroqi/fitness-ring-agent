@@ -95,11 +95,9 @@ class SportDetailParser:
 
         ring_calories_raw = packet[7] | (packet[8] << 8)
 
-        calories = (
-            ring_calories_raw / 10
-            if self.new_calorie_protocol
-            else ring_calories_raw
-        )
+        # Ring calorie field is unreliable for COLMI R10.
+        # Estimate calories from steps for reward logic.
+        calories = round(steps * 0.04, 2)
 
 
         steps = packet[9] | (packet[10] << 8)
