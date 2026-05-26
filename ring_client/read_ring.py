@@ -11,6 +11,9 @@ async def main():
     async with Client(RING_ADDRESS) as ring:
         print("Connected to ring")
 
+        await ring.set_time(datetime.now(timezone.utc))
+        print("Ring time synced")
+
         battery = await ring.get_battery()
         print("Battery:", battery)
 
