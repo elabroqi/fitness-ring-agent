@@ -6,6 +6,27 @@ from colmi_r02_client import real_time
 
 RING_ADDRESS = "31:30:45:32:E9:06"
 
+def print_step_details(title, details):
+    print(f"\n=== {title} ===")
+
+    if not details:
+        print("No data")
+        return
+
+    for d in details:
+        hour = d.time_index // 4
+        minute = (d.time_index % 4) * 15
+
+        print(
+            f"""
+Time: {hour:02}:{minute:02}
+Steps: {d.steps}
+Distance: {d.distance} meters
+Calories: {d.calories}
+Raw Ring Calories: {d.ring_calories_raw}
+------------------------
+"""
+        )
 
 async def main():
     async with Client(RING_ADDRESS) as ring:
@@ -16,13 +37,13 @@ async def main():
 
         # BEFORE ACTIVITY
         start_steps_data = await ring.get_steps(datetime.now(timezone.utc))
-        print("Starting Steps:", start_steps_data)
+        print_step_details("Starting Steps", start_steps_data)
 
         input("Walk around, then press ENTER to continue...")
 
         # AFTER ACTIVITY
         end_steps_data = await ring.get_steps(datetime.now(timezone.utc))
-        print("Ending Steps:", end_steps_data)
+        print_step_details("Ending Steps", end_steps_data)
 
         # REAL-TIME HEART RATE
         hr_values = await ring.get_realtime_reading(

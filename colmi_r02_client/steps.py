@@ -94,14 +94,13 @@ class SportDetailParser:
         time_index = packet[4]
 
         ring_calories_raw = packet[7] | (packet[8] << 8)
-
+        
+        steps = packet[9] | (packet[10] << 8)
+        distance = packet[11] | (packet[12] << 8)
+        
         # Ring calorie field is unreliable for COLMI R10.
         # Estimate calories from steps for reward logic.
         calories = round(steps * 0.04, 2)
-
-
-        steps = packet[9] | (packet[10] << 8)
-        distance = packet[11] | (packet[12] << 8)
 
         details = SportDetail(
             year=year,
