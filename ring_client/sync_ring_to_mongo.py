@@ -41,7 +41,7 @@ async def sync_day(ring, db, target_date):
             f"steps={d.steps} | "
             f"distance={d.distance}m | "
             f"calories={d.calories} | "
-            f"raw_calories={d.ring_calories_raw}"
+            f"raw_calories={getattr(d, 'ring_calories_raw', None)}"
         )
 
     inserted = upsert_sport_details(
