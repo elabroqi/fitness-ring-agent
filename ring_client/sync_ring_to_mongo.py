@@ -35,6 +35,15 @@ async def sync_day(ring, db, target_date):
     print(f"\n=== {target_date.date()} ===")
     print(f"Retrieved {len(details)} sport buckets")
 
+    for d in details:
+        print(
+            f"  {d.timestamp.isoformat()} | "
+            f"steps={d.steps} | "
+            f"distance={d.distance}m | "
+            f"calories={d.calories} | "
+            f"raw_calories={d.ring_calories_raw}"
+        )
+
     inserted = upsert_sport_details(
         db,
         USER_ID,
