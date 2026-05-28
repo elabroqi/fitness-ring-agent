@@ -5,7 +5,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import asyncio
 import os
-from datetime import datetime, timezone
+
+from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
 
@@ -24,38 +25,61 @@ RING_ADDRESS = "31:30:45:32:E9:06"
 USER_ID = "aurela"
 
 
+async def sync_day(ring, db, target_date):
+    details = await ring.get_steps(target_date)
+
+    if isinstance(details, NoData):
+        print(f"No data for {target_date.date()}")
+        return
+
+    print(f"\n=== {target_date.date()} ===")
+    print(f"Retrieved {len(details)} sport buckets")
+
+    inserted = upsert_sport_details(
+        db,
+        USER_ID,
+        details,
+    )
+
+    print(f"Stored {inserted} ring samples")
+
+    recompute_daily_summary(
+        db,
+        USER_ID,
+        target_date.date(),
+    )
+
+
 async def main():
     db = connect(os.getenv("MONGO_URI"))
 
-    async with Client(RING_ADDRESS) as ring:
-        print("Connected to ring")
+    ring = Client(RING_ADDRESS)
 
-        details = await ring.get_steps(datetime.now(timezone.utc))
+    await ring.connect()
+    print("Connected to ring")
 
-        if isinstance(details, NoData):
-            print("No step data")
-            return
+    try:
 
-        print(f"Retrieved {len(details)} sport buckets")
+        # HISTORY SYNC
+        for days_back in range(1, 7):
+            target = datetime.now(timezone.utc) - timedelta(days=days_back)
 
-        inserted = upsert_sport_details(
-            db,
-            USER_ID,
-            details,
-        )
+            try:
+                await sync_day(ring, db, target)
+            except Exception as e:
+                print(f"Failed historical sync for {target.date()}: {e}")
 
-        print(f"Stored {inserted} ring samples")
+        # TODAY SYNC
+        today = datetime.now(timezone.utc)
 
-        today = datetime.now(timezone.utc).date()
+        try:
+            await sync_day(ring, db, today)
+        except Exception as e:
+            print(f"Failed today sync: {e}")
 
-        summary = recompute_daily_summary(
-            db,
-            USER_ID,
-            today,
-        )
-
-        print("Daily Summary:")
-        print(summary)
+    finally:
+        await ring.disconnect()
+        print("Disconnected from ring")
 
 
 if __name__ == "__main__":
