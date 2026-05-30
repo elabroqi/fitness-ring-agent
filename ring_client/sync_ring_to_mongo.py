@@ -5,13 +5,11 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import asyncio
 import os
-
 from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
 
-from colmi_r02_client.client import Client
-from colmi_r02_client.steps import NoData
+from ring_client.colmi_ring import ColmiRing
 
 from backend.storage import (
     connect,
@@ -26,9 +24,9 @@ USER_ID = "aurela"
 
 
 async def sync_day(ring, db, target_date):
-    details = await ring.get_steps(target_date)
+    details = await ring.sync_steps(target_date)
 
-    if isinstance(details, NoData):
+    if not details:
         print(f"No data for {target_date.date()}")
         return
 
@@ -62,13 +60,12 @@ async def sync_day(ring, db, target_date):
 async def main():
     db = connect(os.getenv("MONGO_URI"))
 
-    ring = Client(RING_ADDRESS)
+    ring = ColmiRing(RING_ADDRESS)
 
     await ring.connect()
     print("Connected to ring")
 
     try:
-
         # HISTORY SYNC
         for days_back in range(1, 7):
             target = datetime.now(timezone.utc) - timedelta(days=days_back)
