@@ -333,6 +333,67 @@ async def scan(all: bool) -> None:
     else:
         click.echo("No devices found. Try moving the ring closer to computer")
 
+@util.command(name="bind-ring")
+async def bind_ring() -> None:
+    """Scan for the first supported ring, then hold the connection."""
+    click.echo("Scanning for supported ring...")
+
+    devices = await BleakScanner.discover()
+
+    ring = next(
+        (
+            d for d in devices
+            if d.name and any(d.name.startswith(p) for p in DEVICE_NAME_PREFIXES)
+        ),
+        None,
+    )
+
+    if ring is None:
+        click.echo("No supported ring found. Try moving the ring closer or closing QRing.")
+        return
+
+    click.echo(f"Found ring: {ring.name} | {ring.address}")
+    click.echo("Binding ring and holding connection...")
+
+    client = Client(ring.address)
+
+    while True:
+        try:
+            async with client:
+                click.echo("==================================================")
+                click.echo("✅ Ring connected & bound!")
+                click.echo(f"Device: {ring.name} | {ring.address}")
+                click.echo("==================================================")
+
+                while True:
+                    await asyncio.sleep(60)
+
+                    try:
+                        battery_status = await client.get_battery()
+                        click.echo(f"Link check: {battery_status}")
+                    except Exception as e:
+                        click.echo(f"⚠️ Link check failed: {e}")
+                        raise RuntimeError("Link broken during ping verification")
+
+        except (Exception, BleakError) as e:
+            click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
+            click.echo("🔄 Retrying scan + bind in 5 seconds...")
+            await asyncio.sleep(5)
+
+            devices = await BleakScanner.discover()
+            ring = next(
+                (
+                    d for d in devices
+                    if d.name and any(d.name.startswith(p) for p in DEVICE_NAME_PREFIXES)
+                ),
+                None,
+            )
+
+            if ring is None:
+                click.echo("No supported ring found during retry.")
+                continue
+
+            client = Client(ring.address)
 
 @cli_client.command()
 @click.pass_obj
