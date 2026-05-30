@@ -16,6 +16,8 @@ from bleak import BleakScanner
 from colmi_r02_client.client import Client
 from colmi_r02_client import steps, pretty_print, db, date_utils, hr, real_time
 
+from bleak.exc import BleakError
+
 logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
 
 logger = logging.getLogger(__name__)
@@ -329,3 +331,47 @@ async def scan(all: bool) -> None:
                 click.echo(f"{name:>20}  |  {d.address}")
     else:
         click.echo("No devices found. Try moving the ring closer to computer")
+
+
+@cli_client.command()
+@click.pass_obj
+async def hold_connection(client: Client) -> None:
+    """Keep trying to reconnect until user stops the command."""
+    click.echo(f"Holding connection for: {client.address}")
+
+    while True:
+        try:
+            async with client:
+                click.echo("==================================================")
+                click.echo("✅ Ring connected & connection bond locked!")
+                click.echo("==================================================")
+
+                while True:
+                    await asyncio.sleep(60)
+
+                    try:
+                        battery_status = await client.get_battery()
+                        logger.info(f"Link check: {battery_status}")
+                    except Exception as e:
+                        click.echo(f"⚠️ Link check failed: {e}")
+                        # Forcefully escalate out of the context manager scope
+                        raise RuntimeError("Link broken during ping verification")
+
+        except (Exception, BleakError) as e:
+            click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
+            click.echo("🔄 Retrying a clean state re-entry in 5 seconds...")
+            await asyncio.sleep(5)
+
+
+@click.group()
+def main():
+    """Master CLI Entrypoint for COLMI R02 Engineering Suite"""
+    pass
+
+
+main.add_command(cli_client, name="client")
+main.add_command(util, name="util")
+
+
+if __name__ == "__main__":
+    main(_anyio_backend="asyncio")
