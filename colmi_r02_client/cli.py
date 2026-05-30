@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 import logging
 import time
+import asyncio
 
 import asyncclick as click
 from bleak import BleakScanner
