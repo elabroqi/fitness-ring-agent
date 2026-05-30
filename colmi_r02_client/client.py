@@ -163,7 +163,9 @@ class Client:
             else:
                 logger.debug(f"No result returned from parser for {packet_type}")
         else:
+            print(packet.hex())
             logger.warning(f"Did not expect this packet: {packet}")
+            
 
         if self._record_fh is not None:
             # Length-prefix each packet (1 byte for length) since binary data can contain
