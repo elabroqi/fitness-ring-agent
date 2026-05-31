@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 def initialize_production_database():
-    mongo_uri = os.getenv("MONGODB_URI")
-    db_name = os.getenv("MONGODB_DB")
+    mongo_uri = os.getenv("MONGO_URI")
+    db_name = os.getenv("MONGO_DB")
 
     if not mongo_uri or not db_name:
-        logger.error("❌ Missing MONGODB_URI or MONGODB_DB in your .env file!")
+        logger.error("❌ Missing MONGO_URI or MONGO_DB in your .env file!")
         return
 
     logger.info(f"🔌 Connecting to Atlas Cluster... Target DB: {db_name}")
