@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 
 # Import your storage layer to use its production index configurations
-from colmi_r02_client import storage
+import storage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
