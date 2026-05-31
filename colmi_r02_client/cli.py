@@ -377,8 +377,8 @@ async def bind_ring() -> None:
 
         except (Exception, BleakError) as e:
             click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
-            click.echo("🔄 Retrying scan + bind in 5 seconds...")
-            await asyncio.sleep(5)
+            click.echo("🔄 Retrying scan + bind in 2 seconds...")
+            await asyncio.sleep(2)
 
             devices = await BleakScanner.discover()
             ring = next(
@@ -421,8 +421,8 @@ async def hold_connection(client: Client) -> None:
 
         except (Exception, BleakError) as e:
             click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
-            click.echo("🔄 Retrying a clean state re-entry in 5 seconds...")
-            await asyncio.sleep(5)
+            click.echo("🔄 Retrying a clean state re-entry in 2 seconds...")
+            await asyncio.sleep(2)
 
 
 @click.group()
