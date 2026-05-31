@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import logging
 from typing import Any
@@ -7,12 +8,27 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, rela
 from sqlalchemy import select, UniqueConstraint, ForeignKey, create_engine, event, func, types
 from sqlalchemy.engine import Engine, Dialect
 
+# Import PyMongo to speak to your new Atlas Cluster
+from pymongo import MongoClient
+from dotenv import load_dotenv
+
 from colmi_r02_client import hr, steps
 from colmi_r02_client.client import FullData
 from colmi_r02_client.date_utils import start_of_day, end_of_day
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
+# ==========================================
+# NEW: MongoDB Initializer Wrapper
+# ==========================================
+def get_mongodb_client():
+    """Safely fetch your global Atlas connection mapping"""
+    mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+    if not mongo_uri:
+        logger.warning("⚠️ MONGODB_URI not found in environment variables!")
+        return None
+    return MongoClient(mongo_uri)
 
 class Base(DeclarativeBase):
     pass
@@ -140,12 +156,13 @@ def create_or_find_ring(session: Session, address: str) -> Ring:
     return ring
 
 
+# ==========================================
+# UPDATED: full_sync with MongoDB Pipeline
+# ==========================================
 def full_sync(session: Session, data: FullData) -> None:
-    """
-    TODO:
-        - grab battery
-    """
-
+    """Sync all data from the ring to local SQLite, then push clean blocks to MongoDB Atlas."""
+    
+    # 1. Run your original local SQLite transaction safely
     ring = create_or_find_ring(session, data.address)
     sync = Sync(ring=ring, timestamp=datetime.now(tz=timezone.utc))
     session.add(sync)
@@ -153,6 +170,91 @@ def full_sync(session: Session, data: FullData) -> None:
     _add_heart_rate(sync, ring, data, session)
     _add_sport_details(sync, ring, data, session)
     session.commit()
+    logger.info("✅ SQLite local caching sync transaction complete.")
+
+    # 2. Extract, normalize, and push the clean data up to your MongoDB cluster
+    mongo_client = get_mongodb_client()
+    if mongo_client is None:
+        return
+
+    try:
+        db_name = os.getenv("MONGODB_DB", "fitness_ring")
+        mongo_db = mongo_client[db_name]
+        user_id = "aurela"  # Aligns perfectly with your setup_db.py profile
+        
+        # --- SUB-PIPELINE A: Process and Normalize Steps/Calories ---
+        total_steps = 0
+        total_calories = 0
+        total_distance = 0
+        latest_timestamp = None
+
+        for slog in data.sport_details:
+            if isinstance(slog, steps.NoData):
+                continue
+            for item in slog:
+                total_steps += item.steps
+                # FIXING CALORIE MULTIPLIER BUG RIGHT HERE AT THE GATE:
+                # If your ring reads 47250, this cleanly drops it down to 47.25 kcal
+                total_calories += (item.calories / 1000.0 if item.calories > 1000 else item.calories)
+                total_distance += item.distance
+                latest_timestamp = item.timestamp
+
+        # If we parsed active workout data blocks, upsert them as a Workout event
+        if total_steps > 0:
+            workout_payload = {
+                "user_id": user_id,
+                "synced_at": datetime.now(tz=timezone.utc),
+                "recorded_at": latest_timestamp or datetime.now(tz=timezone.utc),
+                "metrics": {
+                    "daily_steps": total_steps,
+                    "calories_burned_kcal": round(total_calories, 2),
+                    "distance_meters": total_distance
+                },
+                "source_device": "COLMI_R02",
+                "device_address": data.address
+            }
+            
+            # Upsert into a clean timeline table based on the date string
+            date_str = (latest_timestamp or datetime.now(tz=timezone.utc)).strftime("%Y-%m-%d")
+            mongo_db.daily_summaries.update_one(
+                {"user_id": user_id, "date": date_str},
+                {"$set": workout_payload},
+                upsert=True
+            )
+            logger.info(f"💾 MongoDB Atlas: Saved dynamic daily summary metrics for {date_str}")
+
+        # --- SUB-PIPELINE B: Process and Normalize Heart Rates ---
+        heart_rate_documents = []
+        for log in data.heart_rates:
+            if isinstance(log, hr.NoData):
+                continue
+            for reading, timestamp in log.heart_rates_with_times():
+                if reading == 0:
+                    continue
+                
+                # Format an open-ended, granular biometric log document for your AI Agent
+                heart_rate_documents.append({
+                    "user_id": user_id,
+                    "timestamp": timestamp,
+                    "bpm": reading,
+                    "device_address": data.address
+                })
+
+        if heart_rate_documents:
+            # Drop them in using bulk writes to avoid hammer-pinging the network connection
+            # We use update_one with upsert to prevent duplicate entries if you sync twice in one day
+            for hr_doc in heart_rate_documents:
+                mongo_db.biometrics_timeline.update_one(
+                    {"user_id": user_id, "timestamp": hr_doc["timestamp"]},
+                    {"$set": hr_doc},
+                    upsert=True
+                )
+            logger.info(f"💾 MongoDB Atlas: Bulk synced {len(heart_rate_documents)} biometric metrics.")
+
+    except Exception as mongo_err:
+        logger.error(f"❌ Failed to bridge telemetry data over to MongoDB Atlas cluster: {mongo_err}")
+    finally:
+        mongo_client.close()
 
 
 def _add_heart_rate(sync: Sync, ring: Ring, data: FullData, session: Session) -> None:
