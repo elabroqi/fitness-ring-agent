@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 # ==========================================
 def get_mongodb_client():
     """Safely fetch your global Atlas connection mapping"""
-    mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+    mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGO_URI")
     if not mongo_uri:
-        logger.warning("⚠️ MONGODB_URI not found in environment variables!")
+        logger.warning("⚠️ MONGO_URI not found in environment variables!")
         return None
     return MongoClient(mongo_uri)
 
@@ -155,7 +155,6 @@ def create_or_find_ring(session: Session, address: str) -> Ring:
     session.commit()  # not sure this should be here tbh
     return ring
 
-
 # ==========================================
 # UPDATED: full_sync with MongoDB Pipeline
 # ==========================================
@@ -178,6 +177,7 @@ def full_sync(session: Session, data: FullData) -> None:
         return
 
     try:
+        db_name = os.getenv("MONGO_DB", "fitness_ring")
         mongo_db = mongo_client[db_name]
         user_id = "aurela"  # Aligns perfectly with your setup_db.py profile
         
@@ -254,6 +254,7 @@ def full_sync(session: Session, data: FullData) -> None:
         logger.error(f"❌ Failed to bridge telemetry data over to MongoDB Atlas cluster: {mongo_err}")
     finally:
         mongo_client.close()
+
 
 
 def _add_heart_rate(sync: Sync, ring: Ring, data: FullData, session: Session) -> None:
