@@ -10,11 +10,13 @@ from pathlib import Path
 import logging
 import time
 import asyncio
+import real_time
 
 import asyncclick as click
 from bleak import BleakScanner
 
-from colmi_r02_client.client import Client
+from colmi_r02_client.client import Client, FullDataError
+
 from colmi_r02_client import steps, pretty_print, db, date_utils, hr, real_time
 
 from bleak.exc import BleakError
@@ -335,7 +337,7 @@ async def scan(all: bool) -> None:
 
 @util.command(name="bind-ring")
 async def bind_ring() -> None:
-    """Scan for the first supported ring, then hold the connection."""
+    """Scan for the first supported ring, bind it, and hold the connection to stream data."""
     click.echo("Scanning for supported ring...")
 
     devices = await BleakScanner.discover()
@@ -353,26 +355,100 @@ async def bind_ring() -> None:
         return
 
     click.echo(f"Found ring: {ring.name} | {ring.address}")
-    click.echo("Binding ring and holding connection...")
+    
+    # Save the device identity tracking state to MongoDB
+    save_bound_ring(ring.address, ring.name)
+    click.echo("Saved bound ring metadata to MongoDB.")
 
     client = Client(ring.address)
+    user_id = "aurela"
+
+    # Open up your clean MongoDB connection via storage.py
+    import os
+    from backend import storage  # Reaches cleanly into your backend directory
+    mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+    db_name = os.getenv("MONGODB_DB", "fitness_agent")
+    mongo_db = storage.connect(mongo_uri, db_name)
 
     while True:
         try:
             async with client:
                 click.echo("==================================================")
-                click.echo("✅ Ring connected & bound!")
+                click.echo("✅ Ring connected & session bond locked!")
                 click.echo(f"Device: {ring.name} | {ring.address}")
                 click.echo("==================================================")
 
                 while True:
+                    # --- PATHWAY A: SYSTEM HEARTBEAT VALIDATION ---
+                    battery_status = await client.get_battery()
+                    # FIX: Using the correct hardware property names here
+                    click.echo(f"❤️ Link check ok. Battery: {battery_status.battery_level}% | Charging: {battery_status.charging}")
+
+                    # --- PATHWAY B: HISTORICAL BACKLOG SYNC ---
+                    click.echo("🔄 Running background historical sync...")
+                    start_date = datetime.now(timezone.utc) - timedelta(days=1)
+                    end_date = datetime.now(timezone.utc)
+                    
+                    # Pull data chunks across the connection session
+                    full_data_payload = await client.get_full_data(start_date, end_date)
+                    
+                    # Unpack step intervals and pipe safely to your storage engine
+                    sport_detail_logs = []
+                    for slog in full_data_payload.sport_details:
+                        if isinstance(slog, steps.NoData):
+                            continue
+                        
+                        # FIX: Catch partial history errors gracefully
+                        if isinstance(slog, FullDataError):
+                            click.echo(f"⚠️ Step sync failed for {slog.target}: {slog.error}")
+                            continue
+
+                        sport_detail_logs.extend(slog)
+                            
+                    if sport_detail_logs:
+                        storage.upsert_sport_details(mongo_db, user_id, sport_detail_logs)
+                        # Trigger automated database aggregation rollups for the day
+                        storage.recompute_daily_summary(mongo_db, user_id, sport_detail_logs[0].timestamp.date())
+
+                    # Unpack and write historical heart rate log blocks
+                    for hr_log in full_data_payload.heart_rates:
+                        if isinstance(hr_log, hr.NoData):
+                            continue
+                        
+                        # FIX: Catch partial history errors gracefully here too
+                        if isinstance(hr_log, FullDataError):
+                            click.echo(f"⚠️ Heart rate sync failed for {hr_log.target}: {hr_log.error}")
+                            continue
+
+                        storage.upsert_heart_rate_log(mongo_db, user_id, hr_log)
+
+                    # --- PATHWAY C: LIVE STREAMING SNAPSHOT DATA HARVEST ---
+                    click.echo("📡 Pulling real-time sensor measurements... (Keep ring completely still)")
+                    
+                    # Live Heart Rate
+                    live_hr = await client.get_realtime_reading(real_time.RealTimeReading.HEART_RATE)
+                    save_realtime_reading(mongo_db, user_id, "heart_rate", live_hr)
+                    
+                    # Live Blood Oxygen
+                    live_spo2 = await client.get_realtime_reading(real_time.RealTimeReading.SPO2)
+                    save_realtime_reading(mongo_db, user_id, "spo2", live_spo2)
+                    
+                    # Live Heart Rate Variability
+                    live_hrv = await client.get_realtime_reading(real_time.RealTimeReading.HRV)
+                    save_realtime_reading(mongo_db, user_id, "hrv", live_hrv)
+                    
+                    # Live Stress Metrics (PRESSURE)
+                    live_stress = await client.get_realtime_reading(real_time.RealTimeReading.PRESSURE)
+                    save_realtime_reading(mongo_db, user_id, "stress", live_stress)
+
+                    click.echo("✨ Session sync round finished. Standing by for 60 seconds...")
                     await asyncio.sleep(60)
 
+                    # Immediate post-sleep ping check to make sure the loop catches dropouts fast
                     try:
-                        battery_status = await client.get_battery()
-                        click.echo(f"Link check: {battery_status}")
-                    except Exception as e:
-                        click.echo(f"⚠️ Link check failed: {e}")
+                        await client.get_battery()
+                    except Exception as loop_err:
+                        click.echo(f"⚠️ Link check failed post-idle loop sleep state: {loop_err}")
                         raise RuntimeError("Link broken during ping verification")
 
         except (Exception, BleakError) as e:
@@ -394,7 +470,6 @@ async def bind_ring() -> None:
                 continue
 
             client = Client(ring.address)
-
 @cli_client.command()
 @click.pass_obj
 async def hold_connection(client: Client) -> None:
