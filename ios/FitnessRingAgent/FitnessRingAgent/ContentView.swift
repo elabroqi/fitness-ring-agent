@@ -1,21 +1,28 @@
-//
-//  ContentView.swift
-//  FitnessRingAgent
-//
-//  Created by Temp User on 6/3/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            DashboardView()
+                .tabItem {
+                    Label("Dashboard", systemImage: "house.fill")
+                }
+
+            RewardsView()
+                .tabItem {
+                    Label("Rewards", systemImage: "gift.fill")
+                }
+
+            RingView()
+                .tabItem {
+                    Label("Ring", systemImage: "dot.radiowaves.left.and.right")
+                }
+
+            AgentChatView()
+                .tabItem {
+                    Label("Agent", systemImage: "message.fill")
+                }
         }
-        .padding()
     }
 }
 
