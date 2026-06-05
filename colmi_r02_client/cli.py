@@ -10,21 +10,73 @@ from pathlib import Path
 import logging
 import time
 import asyncio
-import real_time
 
 import asyncclick as click
 from bleak import BleakScanner
-
-from colmi_r02_client.client import Client, FullDataError
-
-from colmi_r02_client import steps, pretty_print, db, date_utils, hr, real_time
-
 from bleak.exc import BleakError
 
-logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
+from colmi_r02_client import real_time, steps, pretty_print, db, date_utils, hr
+from colmi_r02_client.client import Client, FullDataError
 
+logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+
+# =====================================================================
+# CORE UTILITY CONTROLLERS (TOP LEVEL SCOPE)
+# =====================================================================
+
+def save_bound_ring(address: str, name: str | None, user_id: str):
+    """Saves the discovered ring's target address mapping to the MongoDB configuration layer."""
+    import os
+    from pymongo import MongoClient
+    
+    mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
+    db_name = os.getenv("MONGODB_DB", "fitness_agent")
+    
+    if not mongo_uri:
+        return
+
+    client = MongoClient(mongo_uri)
+    mongo_db = client[db_name]
+
+    # USE USER_ID DYNAMIC VARIABLE
+    mongo_db.devices.update_one(
+        {"user_id": user_id, "device_type": "COLMI_R02"},
+        {
+            "$set": {
+                "user_id": user_id,
+                "device_type": "COLMI_R02",
+                "address": address,
+                "name": name,
+                "bound": True,
+                "source": "colmi_r02",
+                "updated_at": datetime.now(timezone.utc)
+            }
+        },
+        upsert=True,
+    )
+    client.close()
+
+def save_realtime_reading(db_conn, user_id: str, reading_type: str, values: list[int] | None):
+    """Saves granular real-time snapshot telemetry into separate distinct collections."""
+    if not values:
+        return
+        
+    now = datetime.now(timezone.utc)
+    collection_name = f"{reading_type.lower()}_samples"
+    
+    db_conn[collection_name].insert_one({
+        "user_id": user_id,
+        "source": "colmi_r02",
+        "timestamp": now,
+        "values": values
+    })
+
+
+# =====================================================================
+# CLI STRUCTURE ENGINE A: CORE DEVICE CONTROLLER
+# =====================================================================
 
 @click.group()
 @click.option("--debug/--no-debug", default=False)
@@ -62,7 +114,6 @@ async def cli_client(context: click.Context, debug: bool, record: bool, address:
     assert address
 
     client = Client(address, record_to=record_to)
-
     context.obj = client
 
 
@@ -70,7 +121,6 @@ async def cli_client(context: click.Context, debug: bool, record: bool, address:
 @click.pass_obj
 async def info(client: Client) -> None:
     """Get device info and battery level"""
-
     async with client:
         print("device info", await client.get_device_info())
         print("battery:", await client.get_battery())
@@ -86,7 +136,6 @@ async def info(client: Client) -> None:
 @click.pass_obj
 async def get_heart_rate_log(client: Client, target: datetime) -> None:
     """Get heart rate for given date"""
-
     async with client:
         log = await client.get_heart_rate_log(target)
         print("Data:", log)
@@ -105,10 +154,7 @@ async def get_heart_rate_log(client: Client, target: datetime) -> None:
 )
 @click.pass_obj
 async def set_time(client: Client, when: datetime | None) -> None:
-    """
-    Set the time on the ring, required if you want to be able to interpret any of the logged data
-    """
-
+    """Set the time on the ring, required to interpret logged data."""
     if when is None:
         when = date_utils.now()
     async with client:
@@ -121,7 +167,6 @@ async def set_time(client: Client, when: datetime | None) -> None:
 @click.pass_obj
 async def get_heart_rate_log_settings(client: Client) -> None:
     """Get heart rate log settings"""
-
     async with client:
         click.echo("heart rate log settings:")
         click.echo(await client.get_heart_rate_log_settings())
@@ -139,7 +184,6 @@ async def get_heart_rate_log_settings(client: Client) -> None:
 @click.pass_obj
 async def set_heart_rate_log_settings(client: Client, enable: bool, interval: int) -> None:
     """Set heart rate log settings"""
-
     async with client:
         click.echo("Changing heart rate log settings")
         await client.set_heart_rate_log_settings(enable, interval)
@@ -173,7 +217,6 @@ async def get_real_time(client: Client, reading: str) -> None:
 @click.option("--as-csv", is_flag=True, help="Print as CSV", default=False)
 async def get_steps(client: Client, when: datetime | None = None, as_csv: bool = False) -> None:
     """Get step data"""
-
     if when is None:
         when = datetime.now(tz=timezone.utc)
     async with client:
@@ -197,7 +240,6 @@ async def get_steps(client: Client, when: datetime | None = None, as_csv: bool =
 @click.pass_obj
 async def reboot(client: Client) -> None:
     """Reboot the ring"""
-
     async with client:
         await client.reboot()
         click.echo("Ring rebooted")
@@ -205,22 +247,12 @@ async def reboot(client: Client) -> None:
 
 @cli_client.command()
 @click.pass_obj
-@click.option(
-    "--command",
-    type=click.IntRange(min=0, max=255),
-    help="Raw command",
-)
-@click.option(
-    "--subdata",
-    type=str,
-    help="Hex encoded subdata array, will be parsed into a bytearray",
-)
+@click.option("--command", type=click.IntRange(min=0, max=255), help="Raw command")
+@click.option("--subdata", type=str, help="Hex encoded subdata array")
 @click.option("--replies", type=click.IntRange(min=0), default=0, help="How many reply packets to wait for")
 async def raw(client: Client, command: int, subdata: str | None, replies: int) -> None:
     """Send the ring a raw command"""
-
     p_subdata = bytearray.fromhex(subdata) if subdata is not None else bytearray()
-
     async with client:
         results = await client.raw(command, p_subdata, replies)
         click.echo(results)
@@ -232,28 +264,12 @@ async def raw(client: Client, command: int, subdata: str | None, replies: int) -
     "--db",
     "db_path",
     type=click.Path(writable=True, path_type=Path),
-    help="Path to a directory or file to use as the database. If dir, then filename will be ring_data.sqlite",
+    help="Path to sqlite database.",
 )
-@click.option(
-    "--start",
-    type=click.DateTime(),
-    required=False,
-    help="The date you want to start grabbing data from",
-)
-@click.option(
-    "--end",
-    type=click.DateTime(),
-    required=False,
-    help="The date you want to start grabbing data to",
-)
+@click.option("--start", type=click.DateTime(), required=False, help="Start date")
+@click.option("--end", type=click.DateTime(), required=False, help="End date")
 async def sync(client: Client, db_path: Path | None, start: datetime | None, end: datetime | None) -> None:
-    """
-    Sync all data from the ring to a sqlite database
-
-    Currently grabs:
-        - heart rates
-    """
-
+    """Sync all data from the ring to a sqlite database"""
     if db_path is None:
         db_path = Path.cwd()
     if db_path.is_dir():
@@ -286,42 +302,56 @@ async def sync(client: Client, db_path: Path | None, start: datetime | None, end
     click.echo("Done")
 
 
+@cli_client.command()
+@click.pass_obj
+async def hold_connection(client: Client) -> None:
+    """Keep trying to reconnect until user stops the command."""
+    click.echo(f"Holding connection for: {client.address}")
+
+    while True:
+        try:
+            async with client:
+                click.echo("==================================================")
+                click.echo("✅ Ring connected & connection bond locked!")
+                click.echo("==================================================")
+
+                while True:
+                    await asyncio.sleep(60)
+
+                    try:
+                        battery_status = await client.get_battery()
+                        logger.info(f"Link check: {battery_status}")
+                    except Exception as e:
+                        click.echo(f"⚠️ Link check failed: {e}")
+                        raise RuntimeError("Link broken during ping verification")
+
+        except (Exception, BleakError) as e:
+            click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
+            click.echo("🔄 Retrying a clean state re-entry in 2 seconds...")
+            await asyncio.sleep(2)
+
+
+# =====================================================================
+# CLI STRUCTURE ENGINE B: STRUCTURAL PREFIX MAPPINGS & UTIL GROUP
+# =====================================================================
+
 DEVICE_NAME_PREFIXES = [
-    "R01",
-    "R02",
-    "R03",
-    "R04",
-    "R05",
-    "R06",
-    "R07",
-    "R09",
-    "R10",
-    "COLMI",
-    "VK-5098",
-    "MERLIN",
-    "Hello Ring",
-    "RING1",
-    "boAtring",
-    "TR-R02",
-    "SE",
-    "EVOLVEO",
-    "GL-SR2",
-    "Blaupunkt",
-    "KSIX RING",
+    "R01", "R02", "R03", "R04", "R05", "R06", "R07", "R09", "R10",
+    "COLMI", "VK-5098", "MERLIN", "Hello Ring", "RING1", "boAtring",
+    "TR-R02", "SE", "EVOLVEO", "GL-SR2", "Blaupunkt", "KSIX RING",
 ]
 
 
 @click.group()
 async def util():
     """Generic utilities for the R02 that don't need an address."""
+    pass
 
 
 @util.command()
 @click.option("--all", is_flag=True, help="Print all devices, no name filtering", default=False)
 async def scan(all: bool) -> None:
-    """Scan for possible devices based on known prefixes and print the bluetooth address."""
-
-    # TODO maybe bluetooth specific stuff like this should be in another package?
+    """Scan for possible devices based on known prefixes."""
     devices = await BleakScanner.discover()
 
     if len(devices) > 0:
@@ -335,11 +365,20 @@ async def scan(all: bool) -> None:
     else:
         click.echo("No devices found. Try moving the ring closer to computer")
 
-@util.command(name="bind-ring")
-async def bind_ring() -> None:
-    """Scan for the first supported ring, bind it, and hold the connection to stream data."""
-    click.echo("Scanning for supported ring...")
 
+@util.command(name="bind-ring")
+@click.option(
+    "--user-id",
+    required=True,
+    help="The unique identifier of the user syncing this device session data.",
+)
+async def bind_ring(user_id: str) -> None:
+    """Scan for the first supported ring, bind it, and hold the connection to stream data."""
+    
+    # CLEAR PYLANCE LOGIC FIX: Re-import inside execution loop context block
+    from colmi_r02_client.cli import save_realtime_reading, save_bound_ring
+
+    click.echo("Scanning for supported ring...")
     devices = await BleakScanner.discover()
 
     ring = next(
@@ -356,16 +395,14 @@ async def bind_ring() -> None:
 
     click.echo(f"Found ring: {ring.name} | {ring.address}")
     
-    # Save the device identity tracking state to MongoDB
-    save_bound_ring(ring.address, ring.name)
-    click.echo("Saved bound ring metadata to MongoDB.")
+    # 1. REMOVED HARDCODED USER ID HERE: Pass user_id dynamically into device mapping
+    save_bound_ring(ring.address, ring.name, user_id)
+    click.echo(f"Saved bound ring metadata for user '{user_id}' to MongoDB.")
 
     client = Client(ring.address)
-    user_id = "aurela"
 
-    # Open up your clean MongoDB connection via storage.py
     import os
-    from backend import storage  # Reaches cleanly into your backend directory
+    from backend import storage  
     mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
     db_name = os.getenv("MONGODB_DB", "fitness_agent")
     mongo_db = storage.connect(mongo_uri, db_name)
@@ -376,12 +413,12 @@ async def bind_ring() -> None:
                 click.echo("==================================================")
                 click.echo("✅ Ring connected & session bond locked!")
                 click.echo(f"Device: {ring.name} | {ring.address}")
+                click.echo(f"Target Sync Profile: {user_id}")
                 click.echo("==================================================")
 
                 while True:
                     # --- PATHWAY A: SYSTEM HEARTBEAT VALIDATION ---
                     battery_status = await client.get_battery()
-                    # FIX: Using the correct hardware property names here
                     click.echo(f"❤️ Link check ok. Battery: {battery_status.battery_level}% | Charging: {battery_status.charging}")
 
                     # --- PATHWAY B: HISTORICAL BACKLOG SYNC ---
@@ -389,62 +426,47 @@ async def bind_ring() -> None:
                     start_date = datetime.now(timezone.utc) - timedelta(days=1)
                     end_date = datetime.now(timezone.utc)
                     
-                    # Pull data chunks across the connection session
                     full_data_payload = await client.get_full_data(start_date, end_date)
                     
-                    # Unpack step intervals and pipe safely to your storage engine
                     sport_detail_logs = []
                     for slog in full_data_payload.sport_details:
                         if isinstance(slog, steps.NoData):
                             continue
-                        
-                        # FIX: Catch partial history errors gracefully
                         if isinstance(slog, FullDataError):
                             click.echo(f"⚠️ Step sync failed for {slog.target}: {slog.error}")
                             continue
-
                         sport_detail_logs.extend(slog)
                             
                     if sport_detail_logs:
                         storage.upsert_sport_details(mongo_db, user_id, sport_detail_logs)
-                        # Trigger automated database aggregation rollups for the day
                         storage.recompute_daily_summary(mongo_db, user_id, sport_detail_logs[0].timestamp.date())
 
-                    # Unpack and write historical heart rate log blocks
                     for hr_log in full_data_payload.heart_rates:
                         if isinstance(hr_log, hr.NoData):
                             continue
-                        
-                        # FIX: Catch partial history errors gracefully here too
                         if isinstance(hr_log, FullDataError):
                             click.echo(f"⚠️ Heart rate sync failed for {hr_log.target}: {hr_log.error}")
                             continue
-
                         storage.upsert_heart_rate_log(mongo_db, user_id, hr_log)
 
                     # --- PATHWAY C: LIVE STREAMING SNAPSHOT DATA HARVEST ---
                     click.echo("📡 Pulling real-time sensor measurements... (Keep ring completely still)")
                     
-                    # Live Heart Rate
                     live_hr = await client.get_realtime_reading(real_time.RealTimeReading.HEART_RATE)
                     save_realtime_reading(mongo_db, user_id, "heart_rate", live_hr)
                     
-                    # Live Blood Oxygen
                     live_spo2 = await client.get_realtime_reading(real_time.RealTimeReading.SPO2)
                     save_realtime_reading(mongo_db, user_id, "spo2", live_spo2)
                     
-                    # Live Heart Rate Variability
                     live_hrv = await client.get_realtime_reading(real_time.RealTimeReading.HRV)
                     save_realtime_reading(mongo_db, user_id, "hrv", live_hrv)
                     
-                    # Live Stress Metrics (PRESSURE)
                     live_stress = await client.get_realtime_reading(real_time.RealTimeReading.PRESSURE)
                     save_realtime_reading(mongo_db, user_id, "stress", live_stress)
 
                     click.echo("✨ Session sync round finished. Standing by for 60 seconds...")
                     await asyncio.sleep(60)
 
-                    # Immediate post-sleep ping check to make sure the loop catches dropouts fast
                     try:
                         await client.get_battery()
                     except Exception as loop_err:
@@ -470,35 +492,11 @@ async def bind_ring() -> None:
                 continue
 
             client = Client(ring.address)
-@cli_client.command()
-@click.pass_obj
-async def hold_connection(client: Client) -> None:
-    """Keep trying to reconnect until user stops the command."""
-    click.echo(f"Holding connection for: {client.address}")
 
-    while True:
-        try:
-            async with client:
-                click.echo("==================================================")
-                click.echo("✅ Ring connected & connection bond locked!")
-                click.echo("==================================================")
 
-                while True:
-                    await asyncio.sleep(60)
-
-                    try:
-                        battery_status = await client.get_battery()
-                        logger.info(f"Link check: {battery_status}")
-                    except Exception as e:
-                        click.echo(f"⚠️ Link check failed: {e}")
-                        # Forcefully escalate out of the context manager scope
-                        raise RuntimeError("Link broken during ping verification")
-
-        except (Exception, BleakError) as e:
-            click.echo(f"⚠️ Connection dropped or initialization failed: {e}")
-            click.echo("🔄 Retrying a clean state re-entry in 2 seconds...")
-            await asyncio.sleep(2)
-
+# =====================================================================
+# MASTER ENTRYPOINT ROUTER SETUP
+# =====================================================================
 
 @click.group()
 def main():

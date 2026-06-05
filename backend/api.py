@@ -8,7 +8,7 @@ load_dotenv()
 app = FastAPI()
 
 client = MongoClient(os.getenv("MONGO_URI"))
-db = client["fitness_ring"]
+db = client[os.getenv("MONGODB_DB", "fitness_agent")]
 
 
 @app.get("/")
