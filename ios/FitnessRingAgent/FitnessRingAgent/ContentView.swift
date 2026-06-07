@@ -1,8 +1,18 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("hasSeenWelcome") private var hasSeenWelcome: Bool = false
+    @AppStorage("user_id") private var userId: String = ""
 
+    var body: some View {
+        if userId.isEmpty {
+            WelcomeView(userId: $userId)
+        } else {
+            MainTabView()
+        }
+    }
+}
+
+struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView()
@@ -25,24 +35,33 @@ struct ContentView: View {
                     Label("Account", systemImage: "person.crop.circle")
                 }
         }
-        .fullScreenCover(isPresented: .constant(!hasSeenWelcome)) {
-            WelcomeView(hasSeenWelcome: $hasSeenWelcome)
-        }
     }
 }
 
 struct AccountView: View {
+    @AppStorage("user_id") private var userId: String = ""
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
                 Image(systemName: "person.crop.circle.fill")
                     .font(.system(size: 64))
                     .foregroundStyle(.secondary)
+
                 Text("Account")
                     .font(.title2)
                     .bold()
-                Text("Manage your profile and settings here.")
+
+                Text("Logged in as: \(userId)")
                     .foregroundStyle(.secondary)
+
+                Button(role: .destructive) {
+                    userId = ""
+                } label: {
+                    Text("Log Out")
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 12)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding()
@@ -52,31 +71,50 @@ struct AccountView: View {
 }
 
 struct WelcomeView: View {
-    @Binding var hasSeenWelcome: Bool
+    @Binding var userId: String
+    @State private var username: String = ""
+
+    private var trimmedUsername: String {
+        username.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
+
             Image(systemName: "sparkles")
                 .font(.system(size: 72))
                 .foregroundStyle(.tint)
-            Text("Welcome")
-                .font(.largeTitle).bold()
-            Text("Thanks for installing the app! Here's a quick start—tap Continue to jump in.")
+
+            Text("Fitness Ring Agent")
+                .font(.largeTitle)
+                .bold()
+
+            Text("Connect your ring, track your health, and unlock rewards.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
+
+            TextField("Enter username", text: $username)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal)
+
             Spacer()
+
             Button {
-                hasSeenWelcome = true
+                userId = trimmedUsername
             } label: {
                 Text("Continue")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(trimmedUsername.isEmpty)
             .padding(.horizontal)
             .padding(.bottom)
         }
+        .padding()
     }
 }
 
