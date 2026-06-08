@@ -4,7 +4,7 @@ This database stores activity data synced from a Colmi R02 fitness ring.
 You (the agent) have access to it via the MongoDB MCP. Use this doc to write
 correct, efficient queries.
 
-**Database:** `fitness_ring`
+**Database:** `fitness_agent`
 **Time zone:** All timestamps are stored as UTC `Date` values. When the user
 asks about "today" or "this week," interpret in their local time zone if
 known, otherwise UTC.

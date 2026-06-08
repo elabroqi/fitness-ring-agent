@@ -177,7 +177,7 @@ def full_sync(session: Session, data: FullData) -> None:
         return
 
     try:
-        db_name = os.getenv("MONGO_DB", "fitness_ring")
+        db_name = os.getenv("MONGO_DB", "fitness_agent")
         mongo_db = mongo_client[db_name]
         user_id = "aurela"  # Aligns perfectly with your setup_db.py profile
         

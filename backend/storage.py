@@ -208,7 +208,7 @@ def recompute_daily_summary(db: Database, user_id: str, d: date) -> dict | None:
 
 # --- Convenience -------------------------------------------------------------
 
-def connect(uri: str, db_name: str = "fitness_ring") -> Database:
+def connect(uri: str, db_name: str = "fitness_agent") -> Database:
     """Tiny helper so callers don't have to import pymongo directly."""
     client = MongoClient(uri, tz_aware=True)
     db = client[db_name]
