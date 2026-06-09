@@ -33,7 +33,7 @@ struct DashboardView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Halo AI")
+            .navigationTitle("Welcome \(userId)")
             .task {
                 await loadDashboard()
             }
