@@ -6,7 +6,7 @@ final class APIClient {
     private init() {}
     
     // Simulator:
-    private let baseURL = "http://127.0.0.1:8000"
+    private let baseURL = "http://192.168.1.244:8000"
     
     func fetchDashboard(userId: String) async throws -> DashboardResponse {
         guard let url = URL(string: "\(baseURL)/dashboard/\(userId)") else {
