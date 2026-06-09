@@ -1,5 +1,7 @@
 import Foundation
 import CoreBluetooth
+import SwiftUI
+import Combine
 
 struct DiscoveredRing: Identifiable {
     let id: UUID
