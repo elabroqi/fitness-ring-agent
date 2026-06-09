@@ -32,7 +32,7 @@ class DashboardResponse(BaseModel):
     steps: int
     distance_meters: int
     active_minutes: int
-    calories: int
+    calories: float
 
     # Latest biometric measurements
     bpm: int

@@ -6,7 +6,7 @@ struct DashboardResponse: Codable {
     let steps: Int
     let distanceMeters: Int
     let activeMinutes: Int
-    let calories: Int
+    let calories: Float
     let bpm: Int
     let spo2: Int
     let stressScore: Int
