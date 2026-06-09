@@ -23,7 +23,7 @@ struct RingView: View {
     }
 
     private var sizeMetric: Int {
-        8
+        7
     }
 
     var body: some View {
@@ -280,7 +280,7 @@ struct RingView: View {
             boundRing = ring
             statusMessage = "Ring bound successfully."
             bluetooth.stopScan()
-            
+
             await loadDashboard()
         } catch {
             statusMessage = "Could not bind ring."
@@ -288,17 +288,16 @@ struct RingView: View {
 
         isBinding = false
     }
-}
 
-private func loadDashboard() async {
-    do {
-        dashboard = try await APIClient.shared.fetchDashboard(
-            userId: userId
-        )
-    } catch {
-        statusMessage = "Could not load ring data."
+    private func loadDashboard() async {
+        do {
+            dashboard = try await APIClient.shared.fetchDashboard(userId: userId)
+        } catch {
+            statusMessage = "Could not load ring data."
+        }
     }
 }
+
 
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
