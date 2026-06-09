@@ -30,7 +30,7 @@ class SportDetail:
     time_index: int
     """time_index represents 15 minutes intervals within a day"""
     calories: float
-    ring_calories_raw: int
+    ring_calories_raw: float
     steps: int
     distance: int
     """Distance in meters"""

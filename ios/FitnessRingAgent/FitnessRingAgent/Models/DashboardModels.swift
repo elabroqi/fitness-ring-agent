@@ -3,18 +3,28 @@ import Foundation
 struct DashboardResponse: Codable {
     let userId: String
     let date: String?
+
+    let connectedDeviceName: String
+    let batteryLevel: Int
+    let deviceType: String?
+
     let steps: Int
     let distanceMeters: Int
     let activeMinutes: Int
     let calories: Float
+
     let bpm: Int
     let spo2: Int
     let stressScore: Int
+
     let latestReward: Reward?
-    
+
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case date
+        case connectedDeviceName = "connected_device_name"
+        case batteryLevel = "battery_level"
+        case deviceType = "device_type"
         case steps
         case distanceMeters = "distance_meters"
         case activeMinutes = "active_minutes"
@@ -32,7 +42,7 @@ struct Reward: Codable {
     let description: String
     let unlockedAt: String?
     let used: Bool
-    
+
     enum CodingKeys: String, CodingKey {
         case brand
         case tier

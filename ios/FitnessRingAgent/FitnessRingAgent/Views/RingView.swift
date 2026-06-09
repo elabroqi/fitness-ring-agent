@@ -1,31 +1,44 @@
 import SwiftUI
 
 struct RingView: View {
-    // Dynamic parameters ready to be hooked to your FastAPI backend
-    @State private var batteryLevel: Int = 74
-    @State private var ringName: String = "Oura Ring 4"
-    @State private var ringMaterial: String = "Ceramic"
-    @State private var activeUser: String = "aurela"
-    @State private var sizeMetric: Int = 8
-    
+    @AppStorage("user_id") private var userId: String = ""
+
+    @StateObject private var bluetooth = RingDiscoveryManager()
+
+    @State private var boundRing: DiscoveredRing?
+    @State private var isBinding = false
+    @State private var statusMessage: String?
+    @State private var dashboard: DashboardResponse?
+
+    private var batteryLevel: Int {
+        dashboard?.batteryLevel ?? 0
+    }
+
+    private var ringName: String {
+        dashboard?.connectedDeviceName ?? "No Ring Bound"
+    }
+
+    private var ringMaterial: String {
+        dashboard?.deviceType ?? "Scan to connect"
+    }
+
+    private var sizeMetric: Int {
+        8
+    }
+
     var body: some View {
         ZStack {
-            // =====================================================================
-            // 1. BACKGROUND LAYER: Atmospheric Portrait Blend
-            // =====================================================================
             GeometryReader { geo in
                 ZStack {
-                    Color.black // Base backing
-                    
-                    // Main aesthetic profile imagery
-                    Image(systemName: "person.crop.rectangle.stack") // Placeholder asset
+                    Color.black
+
+                    Image(systemName: "person.crop.rectangle.stack")
                         .resizable()
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
                         .opacity(0.35)
                         .blur(radius: 2)
-                    
-                    // Smooth overhead lighting vignette
+
                     LinearGradient(
                         gradient: Gradient(colors: [
                             Color.blue.opacity(0.2),
@@ -38,44 +51,42 @@ struct RingView: View {
                 }
                 .ignoresSafeArea()
             }
-            
-            // =====================================================================
-            // 2. FOREGROUND CONTENT LAYER
-            // =====================================================================
+
             VStack(spacing: 0) {
-                
-                // --- Top Vitals Array ---
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Battery Life")
+                    Text("Ring Status")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundColor(.white.opacity(0.6))
-                    
+
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(batteryLevel)%")
-                            .font(.system(size: 40, weight: .semibold, design: .rounded))
+                        Text(boundRing == nil ? "Not Bound" : "Bound")
+                            .font(.system(size: 36, weight: .semibold, design: .rounded))
                             .foregroundColor(.white)
-                        
-                        Text("Optimal")
+
+                        Text(bluetooth.bluetoothState)
                             .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundColor(.green)
+                            .foregroundColor(bluetooth.bluetoothState == "On" ? .green : .orange)
+                    }
+
+                    if let statusMessage {
+                        Text(statusMessage)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 40)
                 .padding(.horizontal, 30)
-                
+
                 Spacer()
-                
-                // --- Central Arc Tracking Display ---
+
                 ZStack {
-                    // Thin background track arc
                     Circle()
                         .trim(from: 0.2, to: 0.8)
                         .stroke(Color.white.opacity(0.15), style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(90))
                         .frame(width: 300, height: 300)
-                    
-                    // Active battery trace level glow arc
+
                     Circle()
                         .trim(from: 0.2, to: 0.2 + (0.6 * (Double(batteryLevel) / 100.0)))
                         .stroke(
@@ -85,64 +96,129 @@ struct RingView: View {
                         .rotationEffect(.degrees(90))
                         .frame(width: 300, height: 300)
                         .shadow(color: .white.opacity(0.3), radius: 8, x: 0, y: 0)
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "record.circle")
+                            .font(.system(size: 64, weight: .ultraLight))
+                            .foregroundColor(.white.opacity(0.85))
+
+                        Text(ringName)
+                            .font(.headline)
+                            .foregroundColor(.white)
+
+                        Text(ringMaterial)
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.55))
+                    }
                 }
                 .padding(.bottom, 20)
-                
+
                 Spacer()
-                
-                // =====================================================================
-                // 3. THE FROSTED GLASS CONSOLE PANEL (Matching your blueprint)
-                // =====================================================================
-                VStack(spacing: 25) {
-                    // Small alignment chevron
+
+                VStack(spacing: 20) {
                     Image(systemName: "chevron.compact.down")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.white.opacity(0.3))
                         .padding(.top, 8)
-                    
-                    // Device Information Metadata Row
+
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(ringName)
                                 .font(.system(size: 18, weight: .semibold, design: .rounded))
                                 .foregroundColor(.white)
+
                             Text(ringMaterial)
                                 .font(.system(size: 14, weight: .regular, design: .rounded))
                                 .foregroundColor(.white.opacity(0.5))
                         }
-                        
+
                         Spacer()
-                        
-                        // Hardware Avatar Center (Your Ring Rendering Layout)
+
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.08))
                                 .frame(width: 80, height: 80)
-                            
-                            Image(systemName: "record.circle") // Swap with your beautiful ring asset image
-                                .font(.system(size: 55, weight: .ultraLight))
+
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.system(size: 42, weight: .ultraLight))
                                 .foregroundColor(.white.opacity(0.85))
                         }
-                        
+
                         Spacer()
-                        
+
                         VStack(alignment: .trailing, spacing: 4) {
                             Text("Cloud Status")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundColor(.white.opacity(0.4))
-                            Text("Saved")
+
+                            Text(boundRing == nil ? "Not Saved" : "Saved")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundColor(.blue)
+                                .foregroundColor(boundRing == nil ? .orange : .blue)
+
                             Text("Battery \(batteryLevel)%")
                                 .font(.system(size: 11, weight: .regular, design: .rounded))
                                 .foregroundColor(.white.opacity(0.3))
                         }
                     }
                     .padding(.horizontal, 25)
-                    
-                    // Pod Control Interface Dock (Size | Activate Capsule | Battery)
+
+                    Button {
+                        if bluetooth.isScanning {
+                            bluetooth.stopScan()
+                        } else {
+                            bluetooth.startScan()
+                        }
+                    } label: {
+                        Text(bluetooth.isScanning ? "Scanning..." : "Scan for Ring")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Capsule().fill(Color.white))
+                    }
+                    .padding(.horizontal, 25)
+                    .disabled(bluetooth.bluetoothState != "On" || isBinding)
+
+                    if !bluetooth.discoveredRings.isEmpty {
+                        VStack(spacing: 10) {
+                            ForEach(bluetooth.discoveredRings) { ring in
+                                Button {
+                                    Task {
+                                        await bind(ring)
+                                    }
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(ring.name)
+                                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.white)
+
+                                            Text("Signal \(ring.rssi)")
+                                                .font(.caption)
+                                                .foregroundColor(.white.opacity(0.5))
+                                        }
+
+                                        Spacer()
+
+                                        if isBinding {
+                                            ProgressView()
+                                                .tint(.white)
+                                        } else {
+                                            Text("Bind")
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                    .padding()
+                                    .background(Color.white.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 25)
+                    }
+
                     HStack(spacing: 0) {
-                        // Left Capsule: Hardware Size Metric
                         VStack(spacing: 2) {
                             Text("\(sizeMetric)")
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -153,10 +229,9 @@ struct RingView: View {
                         }
                         .frame(width: 60, height: 60)
                         .background(Circle().fill(Color.white))
-                        
-                        // Center Capsule: System Activation Action
+
                         Button(action: {
-                            print("Triggering background telemetry synchronization loop...")
+                            bluetooth.startScan()
                         }) {
                             Text("Activate")
                                 .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -164,9 +239,8 @@ struct RingView: View {
                                 .frame(width: 140, height: 60)
                                 .background(Capsule().fill(Color.white))
                         }
-                        .padding(.horizontal, -10) // Locks capsules tight against one another
-                        
-                        // Right Capsule: Battery Sync Readout
+                        .padding(.horizontal, -10)
+
                         VStack(spacing: 2) {
                             Text("\(batteryLevel)")
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -181,16 +255,51 @@ struct RingView: View {
                     .padding(.bottom, 35)
                 }
                 .frame(maxWidth: .infinity)
-                // Appends Apple's native structural blurs directly behind your interface metrics
                 .background(.ultraThinMaterial)
-                .environment(\.colorScheme, .dark) // Enforces dark mode styling on blur layers
+                .environment(\.colorScheme, .dark)
                 .cornerRadius(40, corners: [.topLeft, .topRight])
             }
         }
+        .task {
+            await loadDashboard()
+        }
+    }
+
+    private func bind(_ ring: DiscoveredRing) async {
+        isBinding = true
+        statusMessage = nil
+
+        do {
+            try await APIClient.shared.bindDevice(
+                userId: userId,
+                deviceName: ring.name,
+                peripheralUUID: ring.id.uuidString,
+                deviceFamily: ring.name
+            )
+
+            boundRing = ring
+            statusMessage = "Ring bound successfully."
+            bluetooth.stopScan()
+            
+            await loadDashboard()
+        } catch {
+            statusMessage = "Could not bind ring."
+        }
+
+        isBinding = false
     }
 }
 
-// Helper extension to mask corner radius selections uniquely
+private func loadDashboard() async {
+    do {
+        dashboard = try await APIClient.shared.fetchDashboard(
+            userId: userId
+        )
+    } catch {
+        statusMessage = "Could not load ring data."
+    }
+}
+
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
@@ -202,7 +311,11 @@ struct RoundedCorner: Shape {
     var corners: UIRectCorner = .allCorners
 
     func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
         return Path(path.cgPath)
     }
 }

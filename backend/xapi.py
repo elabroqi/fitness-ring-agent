@@ -167,8 +167,8 @@ def statement_from_mongo_sport_detail(doc: dict[str, Any]) -> dict[str, Any]:
             "timestamp": datetime,
             "steps": int,
             "distance_meters": int,
-            "calories": int | float,
-            "ring_calories_raw": int,
+            "calories": float,
+            "ring_calories_raw": float,
             "time_index": int,
             ...
         }

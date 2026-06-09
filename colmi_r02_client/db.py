@@ -108,7 +108,7 @@ class SportDetail(Base):
     __tablename__ = "sport_details"
     __table_args__ = (UniqueConstraint("ring_id", "timestamp"),)
     sport_detail_id: Mapped[int] = mapped_column(primary_key=True)
-    calories: Mapped[int]
+    calories: Mapped[float]
     steps: Mapped[int]
     distance: Mapped[int]
     timestamp = mapped_column(DateTimeInUTC(timezone=True), nullable=False)
