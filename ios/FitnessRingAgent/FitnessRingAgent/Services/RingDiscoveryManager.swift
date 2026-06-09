@@ -54,15 +54,15 @@ extension RingDiscoveryManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            bluetoothState = "On"
+            bluetoothState = "Bluetooth On"
         case .poweredOff:
-            bluetoothState = "Off"
+            bluetoothState = "Bluetooth Off"
         case .unauthorized:
-            bluetoothState = "Unauthorized"
+            bluetoothState = "Bluetooth Unauthorized"
         case .unsupported:
-            bluetoothState = "Unsupported"
+            bluetoothState = "Bluetooth Unsupported"
         default:
-            bluetoothState = "Unavailable"
+            bluetoothState = "Bluetooth Unavailable"
         }
     }
 

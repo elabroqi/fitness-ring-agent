@@ -5,6 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import asyncio
 import os
+import argparse
 from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
@@ -19,8 +20,18 @@ from backend.storage import (
 
 load_dotenv()
 
-RING_ADDRESS = "31:30:45:32:E9:06"
-USER_ID = "aurela"
+
+def _get_args():
+    p = argparse.ArgumentParser(description="Sync ring data to MongoDB for a given user")
+    p.add_argument("--user-id", dest="user_id", help="Target user id to sync for")
+    p.add_argument("--ring-address", dest="ring_address", help="Fallback ring bluetooth address (MAC)")
+    return p.parse_args()
+
+
+ARGS = _get_args()
+
+USER_ID = ARGS.user_id or os.getenv("USER_ID")
+FALLBACK_RING_ADDRESS = ARGS.ring_address or os.getenv("RING_ADDRESS")
 
 
 async def sync_day(ring, db, target_date):
@@ -58,9 +69,31 @@ async def sync_day(ring, db, target_date):
 
 
 async def main():
+    global USER_ID
+
+    if not USER_ID:
+        USER_ID = input("Enter user id to sync for: ").strip()
+
     db = connect(os.getenv("MONGO_URI"))
 
-    ring = ColmiRing(RING_ADDRESS)
+    # Try to resolve the ring address from the registration collections
+    device_doc = db.registered_devices.find_one({"user_id": USER_ID}) or db.devices.find_one({"user_id": USER_ID})
+    ring_address = None
+    if device_doc:
+        ring_address = device_doc.get("address") or device_doc.get("ios_peripheral_uuid")
+
+    if not ring_address:
+        if FALLBACK_RING_ADDRESS:
+            ring_address = FALLBACK_RING_ADDRESS
+            print(f"Using fallback ring address from env/arg: {ring_address}")
+        else:
+            ring_address = input("Could not find registered ring address for user; enter ring address (MAC) to use: ").strip()
+
+    # If the stored id is an iOS peripheral UUID (not a MAC), warn the user
+    if ring_address and len(ring_address) == 36 and '-' in ring_address:
+        print("Warning: resolved address looks like an iOS peripheral UUID. Desktop sync requires a MAC address. If you only have an iOS UUID, run sync from a machine that knows the device MAC or provide --ring-address.")
+
+    ring = ColmiRing(ring_address)
 
     await ring.connect()
     print("Connected to ring")

@@ -158,8 +158,13 @@ def create_or_find_ring(session: Session, address: str) -> Ring:
 # ==========================================
 # UPDATED: full_sync with MongoDB Pipeline
 # ==========================================
-def full_sync(session: Session, data: FullData) -> None:
-    """Sync all data from the ring to local SQLite, then push clean blocks to MongoDB Atlas."""
+def full_sync(session: Session, data: FullData, user_id: str | None = None) -> None:
+    """Sync all data from the ring to local SQLite, then push clean blocks to MongoDB Atlas.
+
+    If `user_id` is not provided the function will try to resolve it by
+    querying the MongoDB `devices` collection for a document matching the
+    ring address in `data.address`.
+    """
     
     # 1. Run your original local SQLite transaction safely
     ring = create_or_find_ring(session, data.address)
@@ -179,7 +184,17 @@ def full_sync(session: Session, data: FullData) -> None:
     try:
         db_name = os.getenv("MONGO_DB", "fitness_agent")
         mongo_db = mongo_client[db_name]
-        user_id = "aurela"  # Aligns perfectly with your setup_db.py profile
+
+        # Resolve user_id if not provided by looking up the ring address in
+        # the registered devices collection (set by the bind flow).
+        if not user_id:
+            device_doc = mongo_db.devices.find_one({"address": data.address})
+            if device_doc:
+                user_id = device_doc.get("user_id")
+
+        if not user_id:
+            logger.warning("No user_id could be resolved for address %s; skipping MongoDB push", data.address)
+            return
         
         # --- SUB-PIPELINE A: Process and Normalize Steps/Calories ---
         total_steps = 0

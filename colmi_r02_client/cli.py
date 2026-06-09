@@ -10,6 +10,7 @@ from pathlib import Path
 import logging
 import time
 import asyncio
+import os
 
 import asyncclick as click
 from bleak import BleakScanner
@@ -26,32 +27,41 @@ logger = logging.getLogger(__name__)
 # CORE UTILITY CONTROLLERS (TOP LEVEL SCOPE)
 # =====================================================================
 
-def save_bound_ring(address: str, name: str | None, user_id: str):
-    """Saves the discovered ring's target address mapping to the MongoDB configuration layer."""
+def save_bound_ring(address: str, name: str | None, user_id: str, device_type: str | None = None):
+    """Saves the discovered ring's target address mapping to the MongoDB configuration layer.
+
+    The function no longer hardcodes a device type. If `device_type` is not
+    provided it will be derived from the device `name` (first token, uppercased).
+    The upsert matches on `user_id` and `address` so repeated binds for the
+    same device update the same document.
+    """
     import os
     from pymongo import MongoClient
-    
+
     mongo_uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
     db_name = os.getenv("MONGODB_DB", "fitness_agent")
-    
+
     if not mongo_uri:
         return
+
+    if device_type is None and name:
+        # Derive a conservative device type from the name's first token
+        device_type = name.split()[0].upper()
 
     client = MongoClient(mongo_uri)
     mongo_db = client[db_name]
 
-    # USE USER_ID DYNAMIC VARIABLE
     mongo_db.devices.update_one(
-        {"user_id": user_id, "device_type": "COLMI_R02"},
+        {"user_id": user_id, "address": address},
         {
             "$set": {
                 "user_id": user_id,
-                "device_type": "COLMI_R02",
+                "device_type": device_type,
                 "address": address,
                 "name": name,
                 "bound": True,
                 "source": "colmi_r02",
-                "updated_at": datetime.now(timezone.utc)
+                "updated_at": datetime.now(timezone.utc),
             }
         },
         upsert=True,
@@ -294,7 +304,23 @@ async def sync(client: Client, db_path: Path | None, start: datetime | None, end
 
         async with client:
             fd = await client.get_full_data(start, end)
-            db.full_sync(session, fd)
+
+            # Try to resolve a user_id for this device from MongoDB so the
+            # upload can be attributed correctly. If not resolvable, full_sync
+            # will skip pushing to MongoDB.
+            try:
+                mongo_client = db.get_mongodb_client()
+                resolved_user = None
+                if mongo_client is not None:
+                    mongo_db_name = os.getenv("MONGO_DB", "fitness_agent")
+                    mongo_db = mongo_client[mongo_db_name]
+                    device_doc = mongo_db.devices.find_one({"address": client.address})
+                    if device_doc:
+                        resolved_user = device_doc.get("user_id")
+            except Exception:
+                resolved_user = None
+
+            db.full_sync(session, fd, user_id=resolved_user)
             when = datetime.now(tz=timezone.utc)
             click.echo("Ignore unexpect packet")
             await client.set_time(when)

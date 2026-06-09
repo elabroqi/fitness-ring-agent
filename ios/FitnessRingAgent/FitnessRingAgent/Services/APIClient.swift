@@ -32,11 +32,14 @@ final class APIClient {
             throw URLError(.badURL)
         }
 
+        let iso = ISO8601DateFormatter().string(from: Date())
+
         let payload: [String: String] = [
             "user_id": userId,
             "device_name": deviceName,
             "ios_peripheral_uuid": peripheralUUID,
-            "device_family": deviceFamily
+            "device_family": deviceFamily,
+            "bound_at": iso
         ]
 
         var request = URLRequest(url: url)
