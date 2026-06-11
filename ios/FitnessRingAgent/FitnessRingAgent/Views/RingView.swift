@@ -268,19 +268,29 @@ struct RingView: View {
     }
 
     private func toggleRingBinding() async {
-
         if ringName != "No Device Bound" {
-            statusMessage = "Unbind not implemented yet."
+            // Unbind flow
+            statusMessage = "Unbinding..."
+            isBinding = true
+            do {
+                try await APIClient.shared.unbindDevice(userId: userId)
+                boundRing = nil
+                dashboard = nil
+                statusMessage = "Ring unbound successfully."
+                await loadDashboard()
+            } catch {
+                statusMessage = "Could not unbind ring."
+            }
+            isBinding = false
             return
         }
 
+        // Existing binding flow
         statusMessage = "Searching for ring..."
         isBinding = true
 
         bluetooth.startScan()
-
         try? await Task.sleep(for: .seconds(2))
-
         bluetooth.stopScan()
 
         guard let ring = bluetooth.discoveredRings.first else {
@@ -290,7 +300,6 @@ struct RingView: View {
         }
 
         await bind(ring)
-
         isBinding = false
     }
 }
