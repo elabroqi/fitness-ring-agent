@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("user_id") private var userId: String = ""
-
+    
     var body: some View {
         if userId.isEmpty {
             WelcomeView(userId: $userId)

@@ -59,7 +59,7 @@ struct RingView: View {
                         .foregroundColor(.white.opacity(0.6))
 
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(boundRing == nil ? "Not Bound" : "Bound")
+                        Text(ringName == "No Device Bound" ? "Not Bound" : "Bound")
                             .font(.system(size: 36, weight: .semibold, design: .rounded))
                             .foregroundColor(.white)
 
@@ -151,7 +151,7 @@ struct RingView: View {
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundColor(.white.opacity(0.4))
 
-                            Text(boundRing == nil ? "Not Saved" : "Saved")
+                            Text(ringName == "No Device Bound" ? "Not Saved" : "Saved")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .foregroundColor(boundRing == nil ? .orange : .blue)
 
@@ -162,13 +162,7 @@ struct RingView: View {
                     }
                     .padding(.horizontal, 25)
 
-                    Button {
-                        if bluetooth.isScanning {
-                            bluetooth.stopScan()
-                        } else {
-                            bluetooth.startScan()
-                        }
-                    } label: {
+                    label: {
                         Text(bluetooth.isScanning ? "Scanning..." : "Scan for Ring")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundColor(.black)
@@ -178,45 +172,6 @@ struct RingView: View {
                     }
                     .padding(.horizontal, 25)
                     .disabled(bluetooth.bluetoothState != "On" || isBinding)
-
-                    if !bluetooth.discoveredRings.isEmpty {
-                        VStack(spacing: 10) {
-                            ForEach(bluetooth.discoveredRings) { ring in
-                                Button {
-                                    Task {
-                                        await bind(ring)
-                                    }
-                                } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(ring.name)
-                                                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                                .foregroundColor(.white)
-
-                                            Text("Signal \(ring.rssi)")
-                                                .font(.caption)
-                                                .foregroundColor(.white.opacity(0.5))
-                                        }
-
-                                        Spacer()
-
-                                        if isBinding {
-                                            ProgressView()
-                                                .tint(.white)
-                                        } else {
-                                            Text("Bind")
-                                                .font(.caption)
-                                                .foregroundColor(.blue)
-                                        }
-                                    }
-                                    .padding()
-                                    .background(Color.white.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 25)
-                    }
 
                     HStack(spacing: 0) {
                         VStack(spacing: 2) {
@@ -230,10 +185,12 @@ struct RingView: View {
                         .frame(width: 60, height: 60)
                         .background(Circle().fill(Color.white))
 
-                        Button(action: {
-                            bluetooth.startScan()
-                        }) {
-                            Text("Activate")
+                        Button {
+                            Task {
+                                await toggleRingBinding()
+                            }
+                        } label: {
+                            Text(ringName == "No Device Bound" ? "Bind Ring" : "Unbind Ring")
                                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                                 .foregroundColor(.black)
                                 .frame(width: 140, height: 60)
@@ -253,6 +210,13 @@ struct RingView: View {
                         .background(Circle().fill(Color.white))
                     }
                     .padding(.bottom, 35)
+                    
+                    if ringName != "No Device Bound" {
+                        Button("Connect Different Ring") {
+                            // open DeviceBindingView
+                        }
+                        .foregroundColor(.white)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .background(.ultraThinMaterial)
@@ -295,6 +259,33 @@ struct RingView: View {
         } catch {
             statusMessage = "Could not load ring data."
         }
+    }
+
+    private func toggleRingBinding() async {
+
+        if ringName != "No Device Bound" {
+            statusMessage = "Unbind not implemented yet."
+            return
+        }
+
+        statusMessage = "Searching for ring..."
+        isBinding = true
+
+        bluetooth.startScan()
+
+        try? await Task.sleep(for: .seconds(2))
+
+        bluetooth.stopScan()
+
+        guard let ring = bluetooth.discoveredRings.first else {
+            statusMessage = "No ring found nearby."
+            isBinding = false
+            return
+        }
+
+        await bind(ring)
+
+        isBinding = false
     }
 }
 

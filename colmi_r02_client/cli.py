@@ -44,9 +44,9 @@ def save_bound_ring(address: str, name: str | None, user_id: str, device_type: s
     if not mongo_uri:
         return
 
-    if device_type is None and name:
-        # Derive a conservative device type from the name's first token
-        device_type = name.split()[0].upper()
+    if not device_type:
+        raise ValueError("device_type is required when saving a bound ring")
+
 
     client = MongoClient(mongo_uri)
     mongo_db = client[db_name]
@@ -60,7 +60,7 @@ def save_bound_ring(address: str, name: str | None, user_id: str, device_type: s
                 "address": address,
                 "name": name,
                 "bound": True,
-                "source": "colmi_r02",
+                "source": device_type,
                 "updated_at": datetime.now(timezone.utc),
             }
         },
@@ -76,9 +76,14 @@ def save_realtime_reading(db_conn, user_id: str, reading_type: str, values: list
     now = datetime.now(timezone.utc)
     collection_name = f"{reading_type.lower()}_samples"
     
+    device_doc = db_conn.devices.find_one({"user_id": user_id})
+
+    if not device_doc:
+        raise ValueError(f"No bound device found for {user_id}")
+
     db_conn[collection_name].insert_one({
         "user_id": user_id,
-        "source": "colmi_r02",
+        "source": device_doc["source"],
         "timestamp": now,
         "values": values
     })

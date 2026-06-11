@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from datetime import datetime, timezone, date
 from typing import Iterable
 
@@ -28,7 +29,22 @@ from colmi_r02_client import steps, hr
 
 logger = logging.getLogger(__name__)
 
-SOURCE = "colmi_r02"
+def get_device_source(db: Database, user_id: str) -> str:
+    device_doc = db.devices.find_one(
+        {"user_id": user_id, "bound": True},
+        sort=[("updated_at", -1)]
+    )
+
+    if not device_doc:
+        raise ValueError(f"No bound device found for user_id={user_id}")
+
+    source = device_doc.get("device_type") or device_doc.get("name")
+
+    if not source:
+        raise ValueError(f"Bound device for user_id={user_id} has no device_type or name")
+
+    return source
+
 
 
 # --- ID helpers --------------------------------------------------------------
