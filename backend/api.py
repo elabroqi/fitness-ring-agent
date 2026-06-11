@@ -50,6 +50,32 @@ class UnifiedDashboardPayload(BaseModel):
 
     latest_reward: Optional[RewardItem] = None
 
+class UnbindDevicePayload(BaseModel):
+    user_id: str
+
+@app.post("/devices/unbind")
+def unbind_device(payload: UnbindDevicePayload):
+
+    result = db.devices.update_one(
+        {"user_id": payload.user_id},
+        {
+            "$set": {
+                "bound": False,
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No bound device found for this user."
+        )
+
+    return {
+        "status": "success",
+        "message": "Device unbound successfully."
+    }
 
 @app.post("/devices/bind")
 def bind_device(payload: DeviceBindingPayload):

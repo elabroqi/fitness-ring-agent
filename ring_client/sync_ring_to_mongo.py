@@ -77,7 +77,7 @@ async def main():
     db = connect(os.getenv("MONGO_URI"))
 
     # Try to resolve the ring address from the registration collections
-    device_doc = db.registered_devices.find_one({"user_id": USER_ID}) or db.devices.find_one({"user_id": USER_ID})
+    device_doc = db.devices.find_one({"user_id": USER_ID}) or db.devices.find_one({"user_id": USER_ID})
     ring_address = None
     if device_doc:
         ring_address = device_doc.get("address") or device_doc.get("ios_peripheral_uuid")
