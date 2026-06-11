@@ -5,6 +5,7 @@ import UserNotifications
 import CoreMotion
 import AppTrackingTransparency
 import AdSupport
+import Combine
 
 final class PermissionManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
