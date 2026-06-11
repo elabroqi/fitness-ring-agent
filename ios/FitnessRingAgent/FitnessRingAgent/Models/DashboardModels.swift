@@ -51,3 +51,7 @@ struct Reward: Codable {
         case used
     }
 }
+
+struct ChatResponse: Codable {
+    let reply: String
+}

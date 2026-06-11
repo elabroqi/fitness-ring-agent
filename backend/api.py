@@ -3,6 +3,8 @@ from pymongo import MongoClient
 from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 import os
 from datetime import datetime, timezone
 
@@ -10,9 +12,62 @@ load_dotenv()
 
 app = FastAPI(title="Fitness Agent Telemetry Aggregator")
 
+#initalizing mongo
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client[os.getenv("MONGODB_DB", "fitness_agent")]
 
+# Initialize the official Google GenAI SDK (Reads GEMINI_API_KEY from environment)
+ai_client = genai.Client()
+
+# =============================================================================
+# 📋 AGENT CHAT REQUEST/RESPONSE SCHEMAS
+# =============================================================================
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str
+
+class ChatResponse(BaseModel):
+    reply: str
+
+# =============================================================================
+# 🛠️ MODEL CONTEXT PROTOCOL (MCP) TOOLS FOR GEMINI
+# =============================================================================
+
+def query_user_fitness_summary(user_id: str) -> dict:
+    """MCP Tool: Retrieves the absolute latest daily summary (steps, calories, active minutes) for a user."""
+    summary = db.daily_summaries.find_one({"user_id": user_id}, sort=[("date", -1)])
+    if not summary:
+        return {"error": "No fitness summary metrics found."}
+    return {
+        "steps": summary.get("steps", 0),
+        "calories": summary.get("calories", 0),
+        "distance_meters": summary.get("distance_meters", 0),
+        "active_minutes": summary.get("active_minutes", 0),
+        "date": str(summary.get("date"))
+    }
+
+def query_latest_biometrics(user_id: str) -> dict:
+    """MCP Tool: Retrieves the newest granular heart rate (bpm) and stress samples for a user."""
+    hr = db.heart_rate_samples.find_one({"user_id": user_id}, sort=[("timestamp", -1)])
+    stress = db.stress_samples.find_one({"user_id": user_id}, sort=[("timestamp", -1)])
+    return {
+        "latest_heart_rate_bpm": hr.get("bpm", 0) if hr else "No Data",
+        "latest_stress_score": stress.get("score", 0) if stress else "No Data"
+    }
+
+def query_user_rewards(user_id: str) -> dict:
+    """MCP Tool: Retrieves all loyalty, gamification, and unlocked brand milestones for a user."""
+    rewards = list(db.rewards.find({"user_id": user_id}).sort("unlocked_at", -1).limit(3))
+    if not rewards:
+        return {"message": "User hasn't unlocked any rewards yet."}
+    return [
+        {
+            "brand": r.get("brand"),
+            "tier": r.get("tier"),
+            "description": r.get("description"),
+            "used": r.get("used", False)
+        } for r in rewards
+    ]
 
 class DeviceBindingPayload(BaseModel):
     user_id: str
@@ -54,6 +109,53 @@ class UnifiedDashboardPayload(BaseModel):
 
     latest_reward: Optional[RewardItem] = None
 
+# =============================================================================
+# 🚀 CORE AI AGENT ENDPOINT ROUTE
+# =============================================================================
+
+@app.post("/agent/chat", response_model=ChatResponse)
+def execute_agent_chat_loop(request: ChatRequest):
+    """
+    Handles live conversational strings from the iOS App. Fires a Gemini session 
+    with functional routing tools acting as a lightweight MongoDB MCP server container.
+    """
+    try:
+        # Define the system identity and context constraints for Google Agent Builder rules
+        system_instruction = """
+        You are the Fitness Ring Agent, a brilliant health, wellness, and gamification assistant.
+        You have direct runtime access to the user's smart ring database through specialized tools.
+        Always look up the user's real data before answering questions about their steps, vitals, or rewards.
+        Be concise, supportive, and precise. If they are close to a milestone, encourage them!
+        """
+        
+        # Bundle our MCP tools to give Gemini live read access to MongoDB Atlas
+        mcp_tools = [query_user_fitness_summary, query_latest_biometrics, query_user_rewards]
+        
+        # Configure the execution agent state parameters
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=mcp_tools,
+            temperature=0.3, # Low temperature ensures reliable tool-calling execution
+        )
+        
+        # Inject the user prompt, appending the context-specific user_id so Gemini can pass it to the tools
+        prompt_with_context = f"Context User ID: {request.user_id}\nUser Question: {request.message}"
+        
+        # Call Gemini Pro runtime engine
+        response = ai_client.models.generate_content(
+            model='gemini-1.5-pro',
+            contents=prompt_with_context,
+            config=config
+        )
+        
+        return ChatResponse(reply=response.text)
+        
+    except Exception as agent_error:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"AI Agent runtime engine execution failure: {str(agent_error)}"
+        )
+    
 
 @app.post("/devices/bind")
 def bind_device(payload: DeviceBindingPayload):
