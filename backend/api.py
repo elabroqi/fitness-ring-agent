@@ -37,6 +37,7 @@ class UnifiedDashboardPayload(BaseModel):
     connected_device_name: str = "No Device Bound"
     battery_level: int = 0
     device_type: Optional[str] = None
+    device_bound: bool = False
 
     steps: int
     distance_meters: int
@@ -131,6 +132,7 @@ def get_dashboard(user_id: str):
         connected_device_name=device_doc.get("name", "Unknown Ring") if device_doc else "No Device Bound",
         battery_level=device_doc.get("battery_level", 0) if device_doc else 0,
         device_type=device_doc.get("device_type") if device_doc else None,
+        device_bound=device_doc.get("bound", False) if device_doc else False,
 
         steps=summary.get("steps", 0) if summary else 0,
         distance_meters=summary.get("distance_meters", 0) if summary else 0,
