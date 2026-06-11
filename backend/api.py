@@ -22,6 +22,10 @@ class DeviceBindingPayload(BaseModel):
     bound_at: Optional[datetime] = None
 
 
+class UnbindDevicePayload(BaseModel):
+    user_id: str
+
+
 class RewardItem(BaseModel):
     brand: str
     tier: str
@@ -39,47 +43,32 @@ class UnifiedDashboardPayload(BaseModel):
     device_type: Optional[str] = None
     device_bound: bool = False
 
-    steps: int
-    distance_meters: int
-    active_minutes: int
-    calories: float
+    steps: int = 0
+    distance_meters: int = 0
+    active_minutes: int = 0
+    calories: float = 0
 
-    bpm: int
-    spo2: int
-    stress_score: int
+    bpm: int = 0
+    spo2: int = 0
+    stress_score: int = 0
 
     latest_reward: Optional[RewardItem] = None
 
-class UnbindDevicePayload(BaseModel):
-    user_id: str
-
-@app.post("/devices/unbind")
-def unbind_device(payload: UnbindDevicePayload):
-
-    result = db.devices.update_one(
-        {"user_id": payload.user_id},
-        {
-            "$set": {
-                "bound": False,
-                "updated_at": datetime.now(timezone.utc)
-            }
-        }
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="No bound device found for this user."
-        )
-
-    return {
-        "status": "success",
-        "message": "Device unbound successfully."
-    }
 
 @app.post("/devices/bind")
 def bind_device(payload: DeviceBindingPayload):
     now = datetime.now(timezone.utc)
+
+    # Only allow one active bound device per user.
+    db.devices.update_many(
+        {"user_id": payload.user_id, "bound": True},
+        {
+            "$set": {
+                "bound": False,
+                "updated_at": now,
+            }
+        },
+    )
 
     document = {
         "user_id": payload.user_id,
@@ -103,43 +92,70 @@ def bind_device(payload: DeviceBindingPayload):
         upsert=True,
     )
 
-    return {"status": "bound", "matched_count": result.matched_count}
+    return {
+        "status": "bound",
+        "matched_count": result.matched_count,
+        "upserted_id": str(result.upserted_id) if result.upserted_id else None,
+    }
+
+
+@app.post("/devices/unbind")
+def unbind_device(payload: UnbindDevicePayload):
+    now = datetime.now(timezone.utc)
+
+    result = db.devices.update_one(
+        {"user_id": payload.user_id, "bound": True},
+        {
+            "$set": {
+                "bound": False,
+                "updated_at": now,
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No bound device found for this user.",
+        )
+
+    return {
+        "status": "success",
+        "message": "Device unbound successfully.",
+    }
 
 
 @app.get("/dashboard/{user_id}", response_model=UnifiedDashboardPayload)
 def get_dashboard(user_id: str):
     device_doc = db.devices.find_one(
         {"user_id": user_id, "bound": True},
-        sort=[("updated_at", -1)]
+        sort=[("updated_at", -1)],
     )
 
     summary = db.daily_summaries.find_one(
         {"user_id": user_id},
-        sort=[("date", -1)]
+        sort=[("date", -1)],
     )
 
     latest_hr = db.heart_rate_samples.find_one(
         {"user_id": user_id},
-        sort=[("timestamp", -1)]
+        sort=[("timestamp", -1)],
     )
 
     latest_spo2 = db.spo2_samples.find_one(
         {"user_id": user_id},
-        sort=[("timestamp", -1)]
+        sort=[("timestamp", -1)],
     )
 
     latest_stress = db.stress_samples.find_one(
         {"user_id": user_id},
-        sort=[("timestamp", -1)]
+        sort=[("timestamp", -1)],
     )
 
     reward_doc = db.rewards.find_one(
         {"user_id": user_id},
-        sort=[("unlocked_at", -1)]
+        sort=[("unlocked_at", -1)],
     )
-
-    if not any([device_doc, summary, latest_hr, latest_spo2, latest_stress, reward_doc]):
-        raise HTTPException(status_code=404, detail="No user data found.")
 
     formatted_reward = None
     if reward_doc:
