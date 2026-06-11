@@ -122,10 +122,14 @@ def execute_agent_chat_loop(request: ChatRequest):
     try:
         # Define the system identity and context constraints for Google Agent Builder rules
         system_instruction = """
-        You are the Fitness Ring Agent, a brilliant health, wellness, and gamification assistant.
-        You have direct runtime access to the user's smart ring database through specialized tools.
-        Always look up the user's real data before answering questions about their steps, vitals, or rewards.
-        Be concise, supportive, and precise. If they are close to a milestone, encourage them!
+        You are the intelligence core of the Fitness Agent Ring iOS application. 
+        You are connected directly to the user's secure MongoDB Atlas cluster via MCP tools.
+
+        When a user asks a question, always invoke the appropriate database tools to inspect their real-time telemetry (bpm, steps, rewards). 
+        Translate the data into natural, encouraging human insights. 
+
+        CRITICAL: Never mention technical phrases like 'database', 'MCP', 'rows', 'collections', or 'tools' to the user. 
+        Speak directly about their health, progress, and unlocked badges as an invisible assistant.
         """
         
         # Bundle our MCP tools to give Gemini live read access to MongoDB Atlas
@@ -143,7 +147,7 @@ def execute_agent_chat_loop(request: ChatRequest):
         
         # Call Gemini Pro runtime engine
         response = ai_client.models.generate_content(
-            model='gemini-1.5-pro',
+            model='gemini-3-pro', # model="gemini-3-pro-preview"
             contents=prompt_with_context,
             config=config
         )

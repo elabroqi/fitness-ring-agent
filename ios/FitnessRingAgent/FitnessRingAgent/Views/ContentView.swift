@@ -13,27 +13,65 @@ struct ContentView: View {
 }
 
 struct MainTabView: View {
+    @State private var isPresentingAgent: Bool = false
+    
     var body: some View {
-        TabView {
-            DashboardView()
-                .tabItem {
-                    Label("Dashboard", systemImage: "house.fill")
-                }
+        ZStack(alignment: .bottomTrailing) {
+            // Core Navigation Subsystem Matrix
+            TabView {
+                DashboardView()
+                    .tabItem {
+                        Label("Dashboard", systemImage: "house.fill")
+                    }
 
-            RewardsView()
-                .tabItem {
-                    Label("Rewards", systemImage: "gift.fill")
-                }
+                RewardsView()
+                    .tabItem {
+                        Label("Rewards", systemImage: "gift.fill")
+                    }
 
-            RingView()
-                .tabItem {
-                    Label("Ring", systemImage: "dot.radiowaves.left.and.right")
-                }
+                RingView()
+                    .tabItem {
+                        Label("Ring", systemImage: "dot.radiowaves.left.and.right")
+                    }
 
-            AccountView()
-                .tabItem {
-                    Label("Account", systemImage: "person.crop.circle")
+                AccountView()
+                    .tabItem {
+                        Label("Account", systemImage: "person.crop.circle")
+                    }
+            }
+            .tint(.blue)
+            
+            #if os(iOS)
+            // Floating Intelligence Action Interface Overlay Layer
+            Button(action: {
+                isPresentingAgent = true
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 56, height: 56)
+                        .shadow(color: .purple.opacity(0.35), radius: 6, x: 0, y: 3)
+                    
+                    Image(systemName: "sparkles")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
                 }
+            }
+            .padding(.trailing, 20)
+            // Pad upward cleanly to avoid intersection collisions with system TabBar nodes
+            .padding(.bottom, 62)
+            #endif
+        }
+        // Asynchronous Sheet Context Target Binding
+        .sheet(isPresented: $isPresentingAgent) {
+            AgentChatView()
         }
     }
 }
