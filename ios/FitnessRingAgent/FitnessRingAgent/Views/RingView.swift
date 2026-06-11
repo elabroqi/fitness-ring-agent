@@ -162,7 +162,13 @@ struct RingView: View {
                     }
                     .padding(.horizontal, 25)
 
-                    label: {
+                    Button {
+                        if bluetooth.isScanning {
+                            bluetooth.stopScan()
+                        } else {
+                            bluetooth.startScan()
+                        }
+                    } label: {
                         Text(bluetooth.isScanning ? "Scanning..." : "Scan for Ring")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
                             .foregroundColor(.black)
@@ -172,7 +178,7 @@ struct RingView: View {
                     }
                     .padding(.horizontal, 25)
                     .disabled(bluetooth.bluetoothState != "On" || isBinding)
-
+                    
                     HStack(spacing: 0) {
                         VStack(spacing: 2) {
                             Text("\(sizeMetric)")
@@ -210,7 +216,7 @@ struct RingView: View {
                         .background(Circle().fill(Color.white))
                     }
                     .padding(.bottom, 35)
-                    
+
                     if ringName != "No Device Bound" {
                         Button("Connect Different Ring") {
                             // open DeviceBindingView
