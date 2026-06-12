@@ -5,17 +5,17 @@ struct DashboardResponse: Codable {
     let date: String?
 
     let connectedDeviceName: String
-    let batteryLevel: Int
+    let batteryLevel: Float
     let deviceType: String?
 
-    let steps: Int
-    let distanceMeters: Int
-    let activeMinutes: Int
+    let steps: Float
+    let distanceMeters: Float
+    let activeMinutes: Float
     let calories: Float
 
-    let bpm: Int
-    let spo2: Int
-    let stressScore: Int
+    let bpm: Float
+    let spo2: Float
+    let stressScore: Float
 
     let latestReward: Reward?
 
