@@ -1,34 +1,45 @@
 import Foundation
 import CoreBluetooth
+import Combine 
 
 @available(iOS 13.0, *)
 final class BluetoothPermissionManager: NSObject, ObservableObject {
     static let shared = BluetoothPermissionManager()
-
+    
     private var central: CBCentralManager?
     private var continuation: CheckedContinuation<CBManagerAuthorization, Never>?
-
-    @Published private(set) var authorization: CBManagerAuthorization = CBCentralManager.authorization
-
-    /// Requests Bluetooth permission by initializing a CBCentralManager and briefly scanning.
-    /// Call this from your "Bind Ring" action before starting discovery/connection.
+    
+    // Fix: Declare it here, initialize it in the init() block below
+    @Published private(set) var authorization: CBManagerAuthorization
+    
+    private override init() {
+        // Set the initial value using the current class-level hardware state
+        if #available(iOS 13.1, *) {
+            self.authorization = CBCentralManager.authorization
+        } else {
+            self.authorization = .notDetermined
+        }
+        super.init()
+    }
+    
     @MainActor
     func requestAuthorization() async -> CBManagerAuthorization {
-        let current = CBCentralManager.authorization
-        if current != .notDetermined {
-            authorization = current
-            return current
+        if #available(iOS 13.1, *) {
+            let current = CBCentralManager.authorization
+            if current != .notDetermined {
+                authorization = current
+                return current
+            }
         }
-
+        
         return await withCheckedContinuation { (continuation: CheckedContinuation<CBManagerAuthorization, Never>) in
             self.continuation = continuation
-            // Creating the manager will cause centralManagerDidUpdateState to fire.
-            // The scan below (started when poweredOn) reliably triggers the system prompt.
+            
+            // Creating the manager will cause centralManagerDidUpdateState to fire and trigger the prompt
             self.central = CBCentralManager(delegate: self, queue: .main, options: [CBCentralManagerOptionShowPowerAlertKey: true])
         }
     }
-
-    /// Convenience wrapper if you prefer a completion handler style.
+    
     @MainActor
     func requestAuthorization(completion: @escaping (CBManagerAuthorization) -> Void) {
         Task { @MainActor in
@@ -38,36 +49,22 @@ final class BluetoothPermissionManager: NSObject, ObservableObject {
     }
 }
 
-@available(iOS 13.0, *)
+// Ensure the class implements the delegate protocol to catch the hardware response update
 extension BluetoothPermissionManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        authorization = CBCentralManager.authorization
-
-        switch central.state {
-        case .poweredOn:
-            if CBCentralManager.authorization == .notDetermined {
-                // Start a very short scan to force the permission prompt.
-                central.scanForPeripherals(withServices: nil, options: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    central.stopScan()
-                    self.finishIfDetermined()
-                }
-            } else {
-                finishIfDetermined()
-            }
-        default:
-            // For other states (poweredOff, unauthorized, etc.), finish if we have a determination.
-            finishIfDetermined()
+        let status: CBManagerAuthorization
+        if #available(iOS 13.1, *) {
+            status = CBCentralManager.authorization
+        } else {
+            status = .allowedAlways // Fallback configuration mapping for legacy targets
         }
-    }
-
-    private func finishIfDetermined() {
-        let auth = CBCentralManager.authorization
-        guard auth != .notDetermined else { return }
-        authorization = auth
-        if let cont = continuation {
-            continuation = nil
-            cont.resume(returning: auth)
+        
+        DispatchQueue.main.async {
+            self.authorization = status
+            if let continuation = self.continuation {
+                continuation.resume(returning: status)
+                self.continuation = nil
+            }
         }
     }
 }
