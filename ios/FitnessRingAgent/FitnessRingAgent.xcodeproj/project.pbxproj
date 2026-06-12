@@ -254,7 +254,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "fitness-ring-agent uses Bluetooth to find and connect your smart ring.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "We use Bluetooth to discover and connect to your fitness ring.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "fitness-ring-agent uses location to support nearby device features and background ring syncing.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "fitness-ring-agent uses location to support nearby device features.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "fitness-ring-agent uses motion and fitness data to track activity.";
@@ -291,7 +291,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "fitness-ring-agent uses Bluetooth to find and connect your smart ring.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "We use Bluetooth to discover and connect to your fitness ring.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "fitness-ring-agent uses location to support nearby device features and background ring syncing.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "fitness-ring-agent uses location to support nearby device features.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "fitness-ring-agent uses motion and fitness data to track activity.";
