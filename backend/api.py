@@ -110,6 +110,15 @@ class UnifiedDashboardPayload(BaseModel):
 
     latest_reward: Optional[RewardItem] = None
 
+
+@app.get("/")
+def root():
+    return {
+        "status": "running",
+        "project": "fitness-ring-agent",
+        "docs": "/docs"
+    }
+
 # =============================================================================
 # 🚀 CORE AI AGENT ENDPOINT ROUTE
 # =============================================================================
