@@ -27,7 +27,7 @@ struct DashboardView: View {
                         MetricCard(title: "Calories", value: "\(dashboard.calories)", icon: "flame.fill")
                         
                         if let reward = dashboard.latestReward {
-                            MetricCard(title: "Latest Reward", value: "\(reward.tier): \(reward.description)", icon: "gift.fill")
+                            MetricCard(title: "Latest Reward", value: "\(reward.tier): \(reward.rewardDescription)", icon: "gift.fill")
                         }
                     }
                 }
