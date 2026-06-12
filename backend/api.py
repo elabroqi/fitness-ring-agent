@@ -12,7 +12,7 @@ load_dotenv()
 
 app = FastAPI(title="Fitness Agent Telemetry Aggregator")
 
-#initalizing mongo
+# Initialize database connections
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client[os.getenv("MONGODB_DB", "fitness_agent")]
 
@@ -69,6 +69,10 @@ def query_user_rewards(user_id: str) -> dict:
         } for r in rewards
     ]
 
+# =============================================================================
+# 📋 EQUIPMENT HARDWARE PROVISIONING SCHEMAS
+# =============================================================================
+
 class DeviceBindingPayload(BaseModel):
     user_id: str
     device_name: str
@@ -76,10 +80,8 @@ class DeviceBindingPayload(BaseModel):
     device_family: str
     bound_at: Optional[datetime] = None
 
-
 class UnbindDevicePayload(BaseModel):
     user_id: str
-
 
 class RewardItem(BaseModel):
     brand: str
@@ -87,7 +89,6 @@ class RewardItem(BaseModel):
     description: str
     unlocked_at: Optional[str] = None
     used: bool
-
 
 class UnifiedDashboardPayload(BaseModel):
     user_id: str
@@ -132,29 +133,33 @@ def execute_agent_chat_loop(request: ChatRequest):
         Speak directly about their health, progress, and unlocked badges as an invisible assistant.
         """
         
-        # Bundle our MCP tools to give Gemini live read access to MongoDB Atlas
+        # Bundle our functional read handlers as available tools
         mcp_tools = [query_user_fitness_summary, query_latest_biometrics, query_user_rewards]
         
         # Configure the execution agent state parameters
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=mcp_tools,
-            temperature=0.3, # Low temperature ensures reliable tool-calling execution
+            temperature=0.3,
         )
         
-        # Inject the user prompt, appending the context-specific user_id so Gemini can pass it to the tools
+        # Format execution context prompt explicitly mapping the session target
         prompt_with_context = f"Context User ID: {request.user_id}\nUser Question: {request.message}"
         
-        # Call Gemini Pro runtime engine
+        # FIX: Point to verified stable model identifier node matching the current SDK specification
         response = ai_client.models.generate_content(
-            model='gemini-3-flash', # model="gemini-3-pro-preview"
+            model='gemini-3-flash',
             contents=prompt_with_context,
             config=config
         )
         
-        return ChatResponse(reply=response.text)
+        # Fallback safeguard in case text parsing block is returned empty
+        reply_text = response.text if response.text else "I looked into your profile metrics, but couldn't compile a clear update right now."
+        return ChatResponse(reply=reply_text)
         
     except Exception as agent_error:
+        # Prints output details directly to the running python console block to trace bugs
+        print(f"❌ Backend Agent Process Fault: {str(agent_error)}")
         raise HTTPException(
             status_code=500, 
             detail=f"AI Agent runtime engine execution failure: {str(agent_error)}"
