@@ -148,7 +148,7 @@ def execute_agent_chat_loop(request: ChatRequest):
         
         # FIX: Point to verified stable model identifier node matching the current SDK specification
         response = ai_client.models.generate_content(
-            model='gemini-3-flash',
+            model='gemini-3.1-pro',
             contents=prompt_with_context,
             config=config
         )
