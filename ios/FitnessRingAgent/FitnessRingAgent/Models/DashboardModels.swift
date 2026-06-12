@@ -5,17 +5,17 @@ struct DashboardResponse: Codable {
     let date: String?
 
     let connectedDeviceName: String
-    let batteryLevel: Float
+    let batteryLevel: Int
     let deviceType: String?
 
-    let steps: Float
-    let distanceMeters: Float
-    let activeMinutes: Float
-    let calories: Float
+    let steps: Int
+    let distanceMeters: Int
+    let activeMinutes: Int
+    let calories: Double
 
-    let bpm: Float
-    let spo2: Float
-    let stressScore: Float
+    let bpm: Int
+    let spo2: Int
+    let stressScore: Int
 
     let latestReward: Reward?
 
@@ -39,14 +39,14 @@ struct DashboardResponse: Codable {
 struct Reward: Codable {
     let brand: String
     let tier: String
-    let description: String
+    let rewardDescription: String
     let unlockedAt: String?
     let used: Bool
 
     enum CodingKeys: String, CodingKey {
         case brand
         case tier
-        case description
+        case rewardDescription = "description"
         case unlockedAt = "unlocked_at"
         case used
     }
