@@ -54,5 +54,8 @@ Gemini + Google Cloud Agent Builder + MongoDB MCP Agent
 python ring_client/sync_ring_to_mongo.py --user-id aurela
 
 
-
+# api uses this as the backend host 
 (https://cova.onrender.com/)
+
+# for documentation
+(https://cova.onrender.com/docs)
