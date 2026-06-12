@@ -124,7 +124,7 @@ struct WelcomeView: View {
                 .font(.system(size: 72))
                 .foregroundStyle(.tint)
 
-            Text("Cova Agent")
+            Text("Cova")
                 .font(.largeTitle)
                 .bold()
 
@@ -142,7 +142,7 @@ struct WelcomeView: View {
             Spacer()
 
             Button {
-                userId = trimmedUsername
+                userId = trimmedUsername.trimmingCharacters(in: .whitespacesAndNewlines)
             } label: {
                 Text("Continue")
                     .frame(maxWidth: .infinity)

@@ -35,7 +35,7 @@ final class APIClient {
         userId: String,
         deviceName: String,
         peripheralUUID: String,
-        deviceFamily: String
+        deviceType: String
     ) async throws {
         guard let url = URL(string: "\(baseURL)/devices/bind") else {
             throw URLError(.badURL)
@@ -47,7 +47,7 @@ final class APIClient {
             "user_id": userId,
             "device_name": deviceName,
             "ios_peripheral_uuid": peripheralUUID,
-            "device_family": deviceFamily,
+            "device_type": deviceType,
             "bound_at": iso
         ]
 

@@ -79,7 +79,7 @@ class DeviceBindingPayload(BaseModel):
     user_id: str
     device_name: str
     ios_peripheral_uuid: str
-    device_family: str
+    device_type: str
     bound_at: Optional[datetime] = None
 
 class UnbindDevicePayload(BaseModel):
@@ -128,15 +128,13 @@ def root():
 @app.get("/dashboard/{user_id}", response_model=UnifiedDashboardPayload)
 def get_dashboard(user_id: str):
     """
-    Fetches the user dashboard. Automatically triggers the local Python BLE script 
-    to pull fresh data from the physical ring before reading from Atlas.
+    Fetches the user dashboard. Safely wraps database queries with null-guards 
+    to handle users without active data rows or bound rings.
     """
-    # ⚡ AUTOMATIC HARDWARE SYNC TRIGGER
+    # ⚡ AUTOMATIC HARDWARE SYNC TRIGGER (Non-blocking)
     try:
         print(f"🔄 App opened for {user_id}. Triggering hardware BLE sync script...")
         script_path = os.path.join("ring_client", "sync_ring_to_mongo.py")
-        
-        # Run the script as a swift, non-blocking background process execution
         subprocess.Popen(
             [sys.executable, script_path, "--user-id", user_id],
             stdout=subprocess.DEVNULL,
@@ -145,37 +143,17 @@ def get_dashboard(user_id: str):
     except Exception as e:
         print(f"⚠️ Background sync trigger skipped: {e}")
 
-    # Read tracking history states straight out of MongoDB collections
-    device_doc = db.devices.find_one(
-        {"user_id": user_id, "bound": True},
-        sort=[("updated_at", -1)],
-    )
+    # =============================================================================
+    # 🔒 SAFELY INGEST DATABASE DOCUMENTS (With Strict Null Checks)
+    # =============================================================================
+    device_doc = db.devices.find_one({"user_id": user_id, "bound": True}, sort=[("updated_at", -1)])
+    summary = db.daily_summaries.find_one({"user_id": user_id}, sort=[("date", -1)])
+    latest_hr = db.heart_rate_samples.find_one({"user_id": user_id}, sort=[("timestamp", -1)])
+    latest_spo2 = db.spo2_samples.find_one({"user_id": user_id}, sort=[("timestamp", -1)])
+    latest_stress = db.stress_samples.find_one({"user_id": user_id}, sort=[("timestamp", -1)])
+    reward_doc = db.rewards.find_one({"user_id": user_id}, sort=[("unlocked_at", -1)])
 
-    summary = db.daily_summaries.find_one(
-        {"user_id": user_id},
-        sort=[("date", -1)],
-    )
-
-    latest_hr = db.heart_rate_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    latest_spo2 = db.spo2_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    latest_stress = db.stress_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    reward_doc = db.rewards.find_one(
-        {"user_id": user_id},
-        sort=[("unlocked_at", -1)],
-    )
-
+    # Parse rewards with fallback
     formatted_reward = None
     if reward_doc:
         formatted_reward = RewardItem(
@@ -186,11 +164,12 @@ def get_dashboard(user_id: str):
             used=reward_doc.get("used", False),
         )
 
+    # Return clean values. If documents are missing, default everything to safely display 0 on screen
     return UnifiedDashboardPayload(
         user_id=user_id,
         date=str(summary.get("date")) if summary else None,
 
-        connected_device_name=device_doc.get("name", "Unknown Ring") if device_doc else "No Device Bound",
+        connected_device_name=device_doc.get("name", "No Device Bound") if device_doc else "No Device Bound",
         battery_level=device_doc.get("battery_level", 0) if device_doc else 0,
         device_type=device_doc.get("device_type") if device_doc else None,
         device_bound=device_doc.get("bound", False) if device_doc else False,
@@ -198,7 +177,7 @@ def get_dashboard(user_id: str):
         steps=summary.get("steps", 0) if summary else 0,
         distance_meters=summary.get("distance_meters", 0) if summary else 0,
         active_minutes=summary.get("active_minutes", 0) if summary else 0,
-        calories=summary.get("calories", 0) if summary else 0,
+        calories=summary.get("calories", 0) if summary else 0.0,
 
         bpm=latest_hr.get("bpm", 0) if latest_hr else 0,
         spo2=latest_spo2.get("value", latest_spo2.get("spo2", 0)) if latest_spo2 else 0,
@@ -276,7 +255,7 @@ def bind_device(payload: DeviceBindingPayload):
         "user_id": payload.user_id,
         "name": payload.device_name,
         "ios_peripheral_uuid": payload.ios_peripheral_uuid,
-        "device_type": payload.device_family,
+        "device_type": payload.device_type,
         "bound": True,
         "bound_at": payload.bound_at or now,
         "updated_at": now,

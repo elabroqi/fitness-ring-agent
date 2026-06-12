@@ -244,7 +244,7 @@ struct RingView: View {
                 userId: userId,
                 deviceName: ring.name,
                 peripheralUUID: ring.id.uuidString,
-                deviceFamily: ring.name
+                deviceType: ring.name
             )
 
             boundRing = ring
