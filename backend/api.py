@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 load_dotenv()
 
-app = FastAPI(title="Fitness Agent Telemetry Aggregator")
+app = FastAPI(title="Cova APP Swagger Docs")
 
 # Initialize database connections
 client = MongoClient(os.getenv("MONGO_URI"))

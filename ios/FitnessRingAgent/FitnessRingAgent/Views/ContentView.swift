@@ -124,7 +124,7 @@ struct WelcomeView: View {
                 .font(.system(size: 72))
                 .foregroundStyle(.tint)
 
-            Text("Fitness Ring Agent")
+            Text("Cova Agent")
                 .font(.largeTitle)
                 .bold()
 

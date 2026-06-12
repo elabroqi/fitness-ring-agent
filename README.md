@@ -1,6 +1,6 @@
-# fitness-ring-agent
+# Cova
 
-Fitness Ring Agent AI is an AI-powered wellness and rewards platform that connects smart ring activity data to personalized insights and reward recommendations.
+Cova is a fitness ring that is AI-powered for wellness and rewards platform that connects smart ring activity data to personalized insights and reward recommendations.
 
 The project uses a COLMI smart ring, a Python BLE sync pipeline, MongoDB Atlas, FastAPI, a SwiftUI iOS app, Gemini, Google Cloud Agent Builder, and MongoDB MCP.
 
@@ -9,6 +9,8 @@ The project uses a COLMI smart ring, a Python BLE sync pipeline, MongoDB Atlas, 
 MongoDB
 
 ## Features
+
+Cova is a SwiftUI smart-ring rewards app backed by a hosted FastAPI agent API. The iOS app is demonstrated in the video, while the hosted Render URL exposes interactive API docs for judges to test the dashboard, device binding, rewards, and AI agent endpoints.
 
 - Smart ring activity sync from a COLMI ring
 - MongoDB Atlas storage for steps, calories, heart rate, SpO2, HRV, stress, rewards, and device metadata
