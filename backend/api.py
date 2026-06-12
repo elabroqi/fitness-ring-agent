@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 import os
+import subprocess
+import sys
 from datetime import datetime, timezone
 
 load_dotenv()
@@ -120,6 +122,92 @@ def root():
     }
 
 # =============================================================================
+# 📊 UNIFIED DASHBOARD DATA LAYER (With Automated Hardware Sync)
+# =============================================================================
+
+@app.get("/dashboard/{user_id}", response_model=UnifiedDashboardPayload)
+def get_dashboard(user_id: str):
+    """
+    Fetches the user dashboard. Automatically triggers the local Python BLE script 
+    to pull fresh data from the physical ring before reading from Atlas.
+    """
+    # ⚡ AUTOMATIC HARDWARE SYNC TRIGGER
+    try:
+        print(f"🔄 App opened for {user_id}. Triggering hardware BLE sync script...")
+        script_path = os.path.join("ring_client", "sync_ring_to_mongo.py")
+        
+        # Run the script as a swift, non-blocking background process execution
+        subprocess.Popen(
+            [sys.executable, script_path, "--user-id", user_id],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception as e:
+        print(f"⚠️ Background sync trigger skipped: {e}")
+
+    # Read tracking history states straight out of MongoDB collections
+    device_doc = db.devices.find_one(
+        {"user_id": user_id, "bound": True},
+        sort=[("updated_at", -1)],
+    )
+
+    summary = db.daily_summaries.find_one(
+        {"user_id": user_id},
+        sort=[("date", -1)],
+    )
+
+    latest_hr = db.heart_rate_samples.find_one(
+        {"user_id": user_id},
+        sort=[("timestamp", -1)],
+    )
+
+    latest_spo2 = db.spo2_samples.find_one(
+        {"user_id": user_id},
+        sort=[("timestamp", -1)],
+    )
+
+    latest_stress = db.stress_samples.find_one(
+        {"user_id": user_id},
+        sort=[("timestamp", -1)],
+    )
+
+    reward_doc = db.rewards.find_one(
+        {"user_id": user_id},
+        sort=[("unlocked_at", -1)],
+    )
+
+    formatted_reward = None
+    if reward_doc:
+        formatted_reward = RewardItem(
+            brand=reward_doc.get("brand", "Unknown"),
+            tier=reward_doc.get("tier", "Unknown"),
+            description=reward_doc.get("description", ""),
+            unlocked_at=str(reward_doc.get("unlocked_at")) if reward_doc.get("unlocked_at") else None,
+            used=reward_doc.get("used", False),
+        )
+
+    return UnifiedDashboardPayload(
+        user_id=user_id,
+        date=str(summary.get("date")) if summary else None,
+
+        connected_device_name=device_doc.get("name", "Unknown Ring") if device_doc else "No Device Bound",
+        battery_level=device_doc.get("battery_level", 0) if device_doc else 0,
+        device_type=device_doc.get("device_type") if device_doc else None,
+        device_bound=device_doc.get("bound", False) if device_doc else False,
+
+        steps=summary.get("steps", 0) if summary else 0,
+        distance_meters=summary.get("distance_meters", 0) if summary else 0,
+        active_minutes=summary.get("active_minutes", 0) if summary else 0,
+        calories=summary.get("calories", 0) if summary else 0,
+
+        bpm=latest_hr.get("bpm", 0) if latest_hr else 0,
+        spo2=latest_spo2.get("value", latest_spo2.get("spo2", 0)) if latest_spo2 else 0,
+        stress_score=latest_stress.get("score", latest_stress.get("stress_score", 0)) if latest_stress else 0,
+
+        latest_reward=formatted_reward,
+    )
+
+# =============================================================================
 # 🚀 CORE AI AGENT ENDPOINT ROUTE
 # =============================================================================
 
@@ -130,7 +218,6 @@ def execute_agent_chat_loop(request: ChatRequest):
     with functional routing tools acting as a lightweight MongoDB MCP server container.
     """
     try:
-        # Define the system identity and context constraints for Google Agent Builder rules
         system_instruction = """
         You are the intelligence core of the Fitness Agent Ring iOS application. 
         You are connected directly to the user's secure MongoDB Atlas cluster via MCP tools.
@@ -142,32 +229,27 @@ def execute_agent_chat_loop(request: ChatRequest):
         Speak directly about their health, progress, and unlocked badges as an invisible assistant.
         """
         
-        # Bundle our functional read handlers as available tools
         mcp_tools = [query_user_fitness_summary, query_latest_biometrics, query_user_rewards]
         
-        # Configure the execution agent state parameters
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=mcp_tools,
             temperature=0.3,
         )
         
-        # Format execution context prompt explicitly mapping the session target
         prompt_with_context = f"Context User ID: {request.user_id}\nUser Question: {request.message}"
         
-        # FIX: Point to verified stable model identifier node matching the current SDK specification
+        # Point to verified stable production identifier
         response = ai_client.models.generate_content(
             model='gemini-3.1-pro-preview',
             contents=prompt_with_context,
             config=config
         )
         
-        # Fallback safeguard in case text parsing block is returned empty
         reply_text = response.text if response.text else "I looked into your profile metrics, but couldn't compile a clear update right now."
         return ChatResponse(reply=reply_text)
         
     except Exception as agent_error:
-        # Prints output details directly to the running python console block to trace bugs
         print(f"❌ Backend Agent Process Fault: {str(agent_error)}")
         raise HTTPException(
             status_code=500, 
@@ -243,67 +325,3 @@ def unbind_device(payload: UnbindDevicePayload):
         "status": "success",
         "message": "Device unbound successfully.",
     }
-
-
-@app.get("/dashboard/{user_id}", response_model=UnifiedDashboardPayload)
-def get_dashboard(user_id: str):
-    device_doc = db.devices.find_one(
-        {"user_id": user_id, "bound": True},
-        sort=[("updated_at", -1)],
-    )
-
-    summary = db.daily_summaries.find_one(
-        {"user_id": user_id},
-        sort=[("date", -1)],
-    )
-
-    latest_hr = db.heart_rate_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    latest_spo2 = db.spo2_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    latest_stress = db.stress_samples.find_one(
-        {"user_id": user_id},
-        sort=[("timestamp", -1)],
-    )
-
-    reward_doc = db.rewards.find_one(
-        {"user_id": user_id},
-        sort=[("unlocked_at", -1)],
-    )
-
-    formatted_reward = None
-    if reward_doc:
-        formatted_reward = RewardItem(
-            brand=reward_doc.get("brand", "Unknown"),
-            tier=reward_doc.get("tier", "Unknown"),
-            description=reward_doc.get("description", ""),
-            unlocked_at=str(reward_doc.get("unlocked_at")) if reward_doc.get("unlocked_at") else None,
-            used=reward_doc.get("used", False),
-        )
-
-    return UnifiedDashboardPayload(
-        user_id=user_id,
-        date=str(summary.get("date")) if summary else None,
-
-        connected_device_name=device_doc.get("name", "Unknown Ring") if device_doc else "No Device Bound",
-        battery_level=device_doc.get("battery_level", 0) if device_doc else 0,
-        device_type=device_doc.get("device_type") if device_doc else None,
-        device_bound=device_doc.get("bound", False) if device_doc else False,
-
-        steps=summary.get("steps", 0) if summary else 0,
-        distance_meters=summary.get("distance_meters", 0) if summary else 0,
-        active_minutes=summary.get("active_minutes", 0) if summary else 0,
-        calories=summary.get("calories", 0) if summary else 0,
-
-        bpm=latest_hr.get("bpm", 0) if latest_hr else 0,
-        spo2=latest_spo2.get("value", latest_spo2.get("spo2", 0)) if latest_spo2 else 0,
-        stress_score=latest_stress.get("score", latest_stress.get("stress_score", 0)) if latest_stress else 0,
-
-        latest_reward=formatted_reward,
-    )

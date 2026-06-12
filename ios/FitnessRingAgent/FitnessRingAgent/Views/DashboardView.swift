@@ -10,13 +10,17 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    // Optimized status message showing the live BLE hardware pipeline status
                     if isLoading {
-                        ProgressView("Loading dashboard...")
+                        ProgressView("Syncing with ring over BLE...")
+                            .padding()
                     }
                     
                     if let errorMessage {
                         Text(errorMessage)
                             .foregroundStyle(.red)
+                            .font(.subheadline)
+                            .padding()
                     }
                     
                     if let dashboard {
@@ -24,7 +28,7 @@ struct DashboardView: View {
                         MetricCard(title: "Heart Rate", value: "\(dashboard.bpm) bpm", icon: "heart.fill")
                         MetricCard(title: "SpO₂", value: "\(dashboard.spo2)%", icon: "drop.fill")
                         MetricCard(title: "Stress", value: "\(dashboard.stressScore)", icon: "brain.head.profile")
-                        MetricCard(title: "Calories", value: "\(dashboard.calories)", icon: "flame.fill")
+                        MetricCard(title: "Calories", value: String(format: "%.0f kcal", dashboard.calories), icon: "flame.fill")
                         
                         if let reward = dashboard.latestReward {
                             MetricCard(title: "Latest Reward", value: "\(reward.tier): \(reward.rewardDescription)", icon: "gift.fill")
@@ -34,9 +38,11 @@ struct DashboardView: View {
                 .padding()
             }
             .navigationTitle("Welcome \(userId)")
+            // 🚀 Runs instantly when dashboard page loads up
             .task {
                 await loadDashboard()
             }
+            // 🔄 Triggers script when user performs a manual pull-to-refresh pull down
             .refreshable {
                 await loadDashboard()
             }
@@ -44,16 +50,27 @@ struct DashboardView: View {
     }
     
     func loadDashboard() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            dashboard = try await APIClient.shared.fetchDashboard(userId: userId)
-        } catch {
-            errorMessage = "Could not load dashboard data."
+        // Enforce state mutations cleanly back on the primary Main UI Thread 
+        DispatchQueue.main.async {
+            self.isLoading = true
+            self.errorMessage = nil
         }
         
-        isLoading = false
+        do {
+            // Hits your newly automated FastAPI background subprocess trigger endpoint node!
+            let freshData = try await APIClient.shared.fetchDashboard(userId: userId)
+            
+            DispatchQueue.main.async {
+                self.dashboard = freshData
+                self.isLoading = false
+            }
+        } catch {
+            print("❌ Dashboard network data sync failure pipeline: \(error)")
+            DispatchQueue.main.async {
+                self.errorMessage = "Could not load dashboard data."
+                self.isLoading = false
+            }
+        }
     }
 }
 
