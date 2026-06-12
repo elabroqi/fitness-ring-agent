@@ -53,10 +53,6 @@ Gemini + Google Cloud Agent Builder + MongoDB MCP Agent
 
 python ring_client/sync_ring_to_mongo.py --user-id aurela
 
-┌─────────────┐ ┌─────────────────┐ ┌────────────────────────┐
-│ iOS Client │ ─────────────► │ FastAPI Backend │ ─────────────► │ Background BLE Worker │
-└─────────────┘ (App Opens) └─────────────────┘ (Trigger Sync)└────────────────────────┘
-▲ │ │
-│ ▼ ▼
-└─────────────────────── [MongoDB Atlas] ◄─────────────────────────────┘
-(Returns Fresh Data)
+
+
+(https://cova.onrender.com/)
