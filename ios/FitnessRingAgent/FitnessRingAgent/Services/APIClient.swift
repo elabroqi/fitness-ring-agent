@@ -6,7 +6,7 @@ final class APIClient {
     private init() {}
     
     // Explicitly targets your laptop's local development network interface
-    private let baseURL = "http://192.168.1.244:8000"
+    private let baseURL = "https://cova.onrender.com"
     
     // =============================================================================
     // 📊 METRIC & TELEMETRY FETCH PATHS
