@@ -61,7 +61,7 @@ struct DeviceBindingView: View {
                 userId: userId,
                 deviceName: ring.name,
                 peripheralUUID: ring.id.uuidString,
-                deviceFamily: ring.name
+                deviceType: ring.name
             )
 
             bindingStatusMessage = "Device bound successfully."
