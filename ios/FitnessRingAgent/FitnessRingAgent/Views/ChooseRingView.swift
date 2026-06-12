@@ -18,9 +18,11 @@ struct DeviceBindingView: View {
                 .fontWeight(.bold)
 
             Button(discoveryManager.isScanning ? "Scanning..." : "Scan") {
+                // Aligned with the robust scanning method name we created earlier
                 discoveryManager.startScan()
             }
             .buttonStyle(.borderedProminent)
+            .disabled(discoveryManager.isScanning)
 
             List(discoveryManager.discoveredRings) { ring in
                 HStack {
@@ -28,7 +30,7 @@ struct DeviceBindingView: View {
                         Text(ring.name)
                             .font(.headline)
 
-                        Text("Signal: \(ring.rssi)")
+                        Text("Signal: \(ring.rssi) dBm")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -40,42 +42,43 @@ struct DeviceBindingView: View {
                         Task { @MainActor in
                             let status = await BluetoothPermissionManager.shared.requestAuthorization()
                             isRequestingBluetooth = false
+                            
                             switch status {
                             case .allowedAlways:
-                                // Proceed with your ring discovery/bind flow
-                                startBindingFlow()
+                                // Pass the selected list item straight into your binding loop execution sequence
+                                await bindSelectedDevice(ring: ring)
                             case .restricted, .denied:
-                                // Guide the user to Settings if needed
                                 showBluetoothDeniedAlert = true
                             case .notDetermined:
-                                // Rare edge case — consider retrying or informing the user
                                 break
                             @unknown default:
                                 break
                             }
                         }
                     }
-                    .disabled(isRequestingBluetooth)
-                    .alert("Bluetooth Access Needed",
-                           isPresented: $showBluetoothDeniedAlert,
-                           actions: {
-                               Button("OK", role: .cancel) { }
-                           },
-                           message: {
-                               Text("Please enable Bluetooth access in Settings to bind your ring.")
-                           }
-                    )
+                    .disabled(isRequestingBluetooth || isSubmitting)
                 }
+            }
+            .alert("Bluetooth Access Needed", isPresented: $showBluetoothDeniedAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Please enable Bluetooth access in Settings to bind your ring.")
+            }
+
+            if isSubmitting {
+                ProgressView()
             }
 
             if !bindingStatusMessage.isEmpty {
                 Text(bindingStatusMessage)
-                    .font(.caption)
-                    .foregroundColor(.blue)
+                    .font(.subheadline)
+                    .foregroundColor(bindingStatusMessage.contains("successfully") ? .green : .blue)
+                    .bold()
             }
         }
         .padding()
         .onDisappear {
+            // Safely clean up radio hardware cycles when navigating away
             discoveryManager.stopScan()
         }
     }
@@ -85,6 +88,7 @@ struct DeviceBindingView: View {
         bindingStatusMessage = "Binding device..."
 
         do {
+            // Hits your newly updated APIClient with identical key alignments!
             try await APIClient.shared.bindDevice(
                 userId: userId,
                 deviceName: ring.name,
@@ -95,26 +99,10 @@ struct DeviceBindingView: View {
             bindingStatusMessage = "Device bound successfully."
             discoveryManager.stopScan()
         } catch {
+            print("❌ Device registration network write skipped: \(error)")
             bindingStatusMessage = "Could not bind device."
         }
 
         isSubmitting = false
-    }
-}
-
-
-@IBAction func bindRingTapped(_ sender: Any) {
-    Task { @MainActor in
-        let status = await BluetoothPermissionManager.shared.requestAuthorization()
-        switch status {
-        case .allowedAlways:
-            startBindingFlow()
-        case .restricted, .denied:
-            presentDeniedAlert() // Show guidance to enable Bluetooth in Settings
-        case .notDetermined:
-            break
-        @unknown default:
-            break
-        }
     }
 }
