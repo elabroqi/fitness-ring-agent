@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreBluetooth 
 
 struct DeviceBindingView: View {
     @AppStorage("user_id") private var userId: String = ""
