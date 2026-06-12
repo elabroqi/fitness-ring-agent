@@ -147,7 +147,7 @@ def execute_agent_chat_loop(request: ChatRequest):
         
         # Call Gemini Pro runtime engine
         response = ai_client.models.generate_content(
-            model='gemini-3-pro', # model="gemini-3-pro-preview"
+            model='gemini-3-flash', # model="gemini-3-pro-preview"
             contents=prompt_with_context,
             config=config
         )
